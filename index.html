@@ -87,15 +87,16 @@
     </div>
 
 <script>
-// 必须开代理，否则跨域失败
+// 核心配置：稳定代理+批次请求
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
 const api = "https://fundgz.1234567.com.cn/js/";
+const BATCH_SIZE = 10; // 10个并行请求，速度稳定
 
 let sort = 0; // 0默认 1从大到小 2从小到大
 let fundData = [];
 let selectSet = new Set();
 
-// 板块匹配规则
+// 持仓板块智能匹配规则
 const plates = [
     {k:['军工','国防'],v:'军工'},
     {k:['光伏','新能源'],v:'新能源/光伏'},
@@ -106,29 +107,32 @@ const plates = [
     {k:['半导体','芯片'],v:'半导体'},
     {k:['恒生','港股'],v:'港股科技'},
     {k:['混合'],v:'混合型'},
-    {k:['债券'],v:'债券型'}
+    {k:['债券'],v:'债券型'},
+    {k:['2000','中证2000'],v:'小盘宽基'},
+    {k:['卫星','商用卫星'],v:'卫星互联网'}
 ];
 
+// 根据基金名称匹配板块
 function getPlate(name){
+    if(!name || name.includes("加载失败")) return "其他";
     for(let p of plates){
         if(p.k.some(w=>name.includes(w))) return p.v;
     }
     return "其他";
 }
 
-// 页面加载
+// 页面加载初始化
 window.onload = ()=>{
-    let codes = localStorage.getItem("funds")||"";
-    if(codes){
-        codes = codes.split(",").filter(c=>c);
-        renderList(codes);
-        loadFundData(codes);
-    }else{
-        renderList([]);
-    }
+    let saved = localStorage.getItem("funds")||"";
+    let codes = saved.split(",").filter(c=>c.trim());
+    // 🔥 初始化就彻底去重，避免历史重复
+    codes = [...new Set(codes)];
+    localStorage.setItem("funds", codes.join(","));
+    renderList(codes);
+    loadFundData(codes);
 };
 
-// 左侧只显示代码
+// 左侧列表：仅显示代码
 function renderList(codes){
     let dom = document.getElementById("fundList");
     dom.innerHTML = "";
@@ -136,7 +140,7 @@ function renderList(codes){
         let div = document.createElement("div");
         div.className = "item" + (selectSet.has(c)?" selected":"");
         div.dataset.code = c;
-        div.textContent = c;
+        div.textContent = c; // 仅显示代码
         div.onclick = ()=>{
             selectSet.has(c) ? selectSet.delete(c) : selectSet.add(c);
             div.classList.toggle("selected");
@@ -145,7 +149,7 @@ function renderList(codes){
     });
 }
 
-// 弹窗
+// 弹窗操作
 function addModal(){document.getElementById("addModal").style.display="flex";}
 function batchModal(){document.getElementById("batchModal").style.display="flex";}
 function closeModal(){
@@ -153,81 +157,101 @@ function closeModal(){
     document.getElementById("batchModal").style.display="none";
 }
 
-// 添加单个
+// 添加单个基金（自动去重）
 function doAdd(){
     let c = document.getElementById("addInput").value.trim();
     if(!c) return;
-    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x);
-    if(!old.includes(c)) old.push(c);
-    old = [...new Set(old)];
-    localStorage.setItem("funds",old.join(","));
+    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
+    // 🔥 去重后添加
+    let codes = [...new Set([...old, c])];
+    localStorage.setItem("funds", codes.join(","));
     closeModal();
-    renderList(old);
-    loadFundData(old);
+    renderList(codes);
+    loadFundData(codes);
 }
 
-// 批量添加
+// 批量添加基金（自动去重）
 function doBatch(){
     let val = document.getElementById("batchInput").value.trim();
     if(!val) return;
-    let add = val.replace(/，/g,",").replace(/\s+/g,",").split(",").filter(x=>x);
-    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x);
-    let all = [...new Set([...old,...add])];
-    localStorage.setItem("funds",all.join(","));
+    let add = val.replace(/，/g,",").replace(/\s+/g,",").split(",").filter(x=>x.trim());
+    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
+    // 🔥 彻底去重合并
+    let codes = [...new Set([...old, ...add])];
+    localStorage.setItem("funds", codes.join(","));
     closeModal();
-    renderList(all);
-    loadFundData(all);
+    renderList(codes);
+    loadFundData(codes);
 }
 
-// 删除选中
+// 删除选中基金
 function delSelect(){
-    if(selectSet.size===0) return alert("请选中");
-    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x);
-    let neo = old.filter(c=>!selectSet.has(c));
-    localStorage.setItem("funds",neo.join(","));
+    if(selectSet.size===0) return alert("请先选中要删除的基金");
+    let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
+    // 过滤掉选中的代码
+    let codes = old.filter(c=>!selectSet.has(c));
+    localStorage.setItem("funds", codes.join(","));
     selectSet.clear();
-    renderList(neo);
-    loadFundData(neo);
+    renderList(codes);
+    loadFundData(codes);
 }
 
-// 加载数据
+// 🔥 核心：加载数据+彻底去重+正确解析昨日涨幅
 async function loadFundData(codes){
-    if(!codes) codes = (localStorage.getItem("funds")||"").split(",").filter(x=>x);
+    // 读取代码，无参数则从本地读取
+    if(!codes){
+        let saved = localStorage.getItem("funds")||"";
+        codes = saved.split(",").filter(c=>c.trim());
+    }
+    // 🔥 第一步：彻底去重，永远不会有重复
+    codes = [...new Set(codes)];
+    // 回存本地，确保后续无重复
+    localStorage.setItem("funds", codes.join(","));
+
     if(codes.length===0){
-        document.getElementById("tableBody").innerHTML=`<tr><td colspan="5" class="loading">暂无基金</td></tr>`;
+        document.getElementById("tableBody").innerHTML=`<tr><td colspan="5" class="loading">暂无自选基金</td></tr>`;
         return;
     }
-    codes = [...new Set(codes)];
+
     fundData = [];
     let body = document.getElementById("tableBody");
     body.innerHTML=`<tr><td colspan="5" class="loading">加载中...</td></tr>`;
 
-    for(let i=0;i<codes.length;i+=10){
-        let batch = codes.slice(i,i+10);
+    // 分批次并行请求，速度稳定
+    for(let i=0;i<codes.length;i+=BATCH_SIZE){
+        let batch = codes.slice(i,i+BATCH_SIZE);
         let tasks = batch.map(async c=>{
             try{
                 let u = proxy + encodeURIComponent(api + c + ".js");
                 let res = await fetch(u);
                 let txt = await res.text();
+                // 正确解析天天基金接口数据
                 let d = JSON.parse(txt.replace("jsonpgz(","").replace(");",""));
+                
+                // 🔥 正确解析昨日涨跌幅（zdf是官方标准字段）
+                let zdf = parseFloat(d.zdf);
+                let yesRate = isNaN(zdf) ? null : zdf;
+
                 return {
                     code:d.fundcode,
                     name:d.name,
-                    now:parseFloat(d.gszzl)||0,
+                    now:parseFloat(d.gszzl)||0, // 今日实时涨幅
+                    yes:yesRate, // 昨日涨跌幅（正确字段）
                     time:d.gztime||"-",
                     plate:getPlate(d.name)
                 };
             }catch(e){
-                return {code:c,name:"加载失败",now:0,time:"-",plate:"-"};
+                console.error(`加载${c}失败:`,e);
+                return {code:c,name:"加载失败",now:0,yes:null,time:"-",plate:"-"};
             }
         });
         let res = await Promise.all(tasks);
         fundData.push(...res);
-        renderTable();
+        renderTable(); // 每批加载完立即渲染
     }
 }
 
-// 排序
+// 切换排序
 function setSort(){
     sort = (sort+1)%3;
     let arr = ["","↓","↑"];
@@ -235,20 +259,27 @@ function setSort(){
     renderTable();
 }
 
-// 渲染表格
+// 渲染表格（正确显示昨日涨幅）
 function renderTable(){
     let data = [...fundData];
+    // 排序逻辑
     if(sort===1) data.sort((a,b)=>b.now - a.now);
     if(sort===2) data.sort((a,b)=>a.now - b.now);
 
     let html = "";
     for(let d of data){
+        // 今日涨幅样式
         let nowCls = d.now>0?"red":d.now<0?"green":"";
+        // 🔥 昨日涨幅样式：空值显示-，有数据正常显示
+        let yesVal = d.yes;
+        let yesDisplay = yesVal !== null ? `${yesVal.toFixed(2)}%` : "-";
+        let yesCls = yesVal > 0 ? "red" : yesVal < 0 ? "green" : "";
+
         html+=`
         <tr>
             <td>${d.name}(${d.code})</td>
             <td class="${nowCls}">${d.now.toFixed(2)}%</td>
-            <td>-</td>
+            <td class="${yesCls}">${yesDisplay}</td>
             <td>${d.plate}</td>
             <td>${d.time}</td>
         </tr>`;
