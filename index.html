@@ -3,39 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <title>基金实时监控</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:微软雅黑,system-ui;}
-        body{background:#f0f2f5;height:100vh;overflow:hidden;}
-        .top{height:46px;background:#409eff;color:white;line-height:46px;padding:0 15px;}
-        .container{display:flex;height:calc(100vh - 46px);padding:10px;gap:10px;}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:微软雅黑,system-ui, sans-serif;}
+        body{background:#f0f2f5;min-height:100vh;}
+        /* 顶部栏 */
+        .top{height:46px;background:#409eff;color:white;line-height:46px;padding:0 15px;font-size:16px;}
+        /* 主容器 - 桌面端左右布局 */
+        .container{display:flex;gap:10px;padding:10px;min-height:calc(100vh - 46px);}
+        /* 左侧自选栏 */
         .left{width:200px;background:white;border:1px solid #ddd;border-radius:6px;display:flex;flex-direction:column;}
-        .left-title{height:44px;line-height:44px;text-align:center;border-bottom:1px solid #ddd;font-weight:bold;}
-        .list{flex:1;overflow-y:auto;padding:8px;}
-        .item{padding:8px 10px;background:#f5f7fa;border-radius:4px;margin-bottom:4px;cursor:pointer;}
+        .left-title{height:44px;line-height:44px;text-align:center;border-bottom:1px solid #ddd;font-weight:bold;font-size:16px;}
+        .list{flex:1;overflow-y:auto;padding:8px;max-height:300px;}
+        .item{padding:8px 10px;background:#f5f7fa;border-radius:4px;margin-bottom:4px;cursor:pointer;font-size:14px;}
         .item.selected{background:#c6e2ff;color:#409eff;}
         .btns{padding:8px;display:flex;flex-direction:column;gap:6px;border-top:1px solid #ddd;}
-        .btn{height:38px;background:#409eff;color:white;border:none;border-radius:4px;cursor:pointer;}
-        .right{flex:1;background:white;border:1px solid #ddd;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;}
-        .table-box{flex:1;overflow:auto;padding:8px;}
-        table{width:100%;border-collapse:collapse;}
-        th{background:#409eff;color:white;height:38px;padding:0 10px;text-align:left;font-weight:normal;cursor:pointer;}
-        td{height:38px;padding:0 10px;border-bottom:1px solid #eee;}
+        .btn{height:38px;background:#409eff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px;}
+        /* 右侧表格栏 */
+        .right{flex:1;background:white;border:1px solid #ddd;border-radius:6px;overflow:hidden;}
+        .table-box{height:100%;overflow:auto;}
+        table{width:100%;border-collapse:collapse;min-width:600px;}
+        th{background:#409eff;color:white;height:40px;padding:0 10px;text-align:left;font-weight:normal;cursor:pointer;font-size:14px;}
+        td{height:40px;padding:0 10px;border-bottom:1px solid #eee;font-size:14px;white-space:nowrap;}
         .red{color:#f56c6c;font-weight:bold;}
         .green{color:#67c23a;font-weight:bold;}
         .sort{font-size:12px;margin-left:4px;}
         .loading{text-align:center;padding:20px;color:#999;}
-        .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;}
-        .modal-box{width:360px;background:white;border-radius:8px;padding:18px;}
-        .modal-title{margin-bottom:12px;font-weight:bold;}
-        .modal-input{width:100%;height:90px;padding:10px;border:1px solid #ddd;border-radius:4px;margin-bottom:12px;}
+        /* 弹窗样式 */
+        .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:999;}
+        .modal-box{width:90%;max-width:360px;background:white;border-radius:8px;padding:18px;}
+        .modal-title{margin-bottom:12px;font-weight:bold;font-size:16px;}
+        .modal-input{width:100%;height:90px;padding:10px;border:1px solid #ddd;border-radius:4px;margin-bottom:12px;font-size:14px;}
         .modal-btns{display:flex;gap:10px;justify-content:flex-end;}
         .btn-cancel{background:#f5f7fa;color:#666;}
+
+        /* ==================== 手机端响应式适配 ==================== */
+        @media (max-width:768px){
+            .container{flex-direction:column;/* 手机端上下布局 */}
+            .left{width:100%;height:auto;}
+            .list{max-height:200px;}
+            .right{width:100%;}
+            .table-box{overflow-x:auto;/* 表格横向滑动 */}
+            th,td{padding:0 8px;font-size:13px;}
+            .top{font-size:15px;}
+            .btn{height:36px;font-size:13px;}
+        }
     </style>
 </head>
 <body>
     <div class="top">基金实时监控</div>
     <div class="container">
+        <!-- 左侧自选栏 -->
         <div class="left">
             <div class="left-title">自选基金</div>
             <div class="list" id="fundList"></div>
@@ -46,6 +64,8 @@
                 <button class="btn" onclick="batchModal()">批量添加</button>
             </div>
         </div>
+
+        <!-- 右侧表格 -->
         <div class="right">
             <div class="table-box">
                 <table>
@@ -63,6 +83,7 @@
         </div>
     </div>
 
+    <!-- 添加弹窗 -->
     <div class="modal" id="addModal">
         <div class="modal-box">
             <div class="modal-title">添加基金</div>
@@ -74,6 +95,7 @@
         </div>
     </div>
 
+    <!-- 批量弹窗 -->
     <div class="modal" id="batchModal">
         <div class="modal-box">
             <div class="modal-title">批量添加</div>
@@ -86,16 +108,16 @@
     </div>
 
 <script>
-// 极简配置：仅单接口 + 超低并发 + 极速流畅
+// 极速配置：单接口 + 2个并行，流畅不卡
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
 const realtimeApi = "https://fundgz.1234567.com.cn/js/";
-const BATCH_SIZE = 2; // 2个并行，绝对不卡，100%成功
+const BATCH_SIZE = 2;
 
 let sort = 0;
 let fundData = [];
 let selectSet = new Set();
 
-// 完整版块匹配（创业板/宽基全覆盖，无其他）
+// 完整版块匹配
 const plates = [
     {k:['创业板','创业板指','创业板50','创成长'],v:'创业板'},
     {k:['量化','量化选股'],v:'量化策略'},
@@ -115,7 +137,6 @@ const plates = [
     {k:['医药','医疗'],v:'医药/医疗'}
 ];
 
-// 板块匹配函数
 function getPlate(name){
     if(!name) return "其他";
     const lowerName = name.toLowerCase();
@@ -196,7 +217,7 @@ function delSelect(){
     loadFundData(codes);
 }
 
-// 核心：仅加载实时数据（极速、无卡顿）
+// 加载数据
 async function loadFundData(codes){
     if(!codes){
         let saved = localStorage.getItem("funds")||"";
@@ -214,7 +235,6 @@ async function loadFundData(codes){
     let body = document.getElementById("tableBody");
     body.innerHTML=`<tr><td colspan="4" class="loading">加载中...</td></tr>`;
 
-    // 2个一批，极致流畅
     for(let i=0;i<codes.length;i+=BATCH_SIZE){
         let batch = codes.slice(i,i+BATCH_SIZE);
         let tasks = batch.map(async c=>{
@@ -248,7 +268,7 @@ function setSort(){
     renderTable();
 }
 
-// 表格渲染
+// 渲染表格
 function renderTable(){
     let data = [...fundData];
     if(sort===1) data.sort((a,b)=>b.now - a.now);
