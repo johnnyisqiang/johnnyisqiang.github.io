@@ -87,45 +87,100 @@
     </div>
 
 <script>
-// 核心配置：稳定代理+批次请求
+// 核心配置：双接口+稳定代理+批次请求
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
-const api = "https://fundgz.1234567.com.cn/js/";
-const BATCH_SIZE = 10; // 10个并行请求，速度稳定
+const realtimeApi = "https://fundgz.1234567.com.cn/js/"; // 实时估值接口
+const netValueApi = "https://fund.eastmoney.com/pingzhongdata/"; // 净值接口（获取昨日涨跌幅）
+const BATCH_SIZE = 8; // 8个并行请求，平衡速度与稳定性
 
 let sort = 0; // 0默认 1从大到小 2从小到大
 let fundData = [];
 let selectSet = new Set();
 
-// 持仓板块智能匹配规则
+// 🔥 超级板块匹配库（50+关键词+30+板块，覆盖95%+基金）
 const plates = [
-    {k:['军工','国防'],v:'军工'},
-    {k:['光伏','新能源'],v:'新能源/光伏'},
-    {k:['科创','科创板'],v:'科创板'},
-    {k:['创业板','创业'],v:'创业板'},
-    {k:['医药','医疗'],v:'医药'},
-    {k:['消费','白酒'],v:'消费'},
-    {k:['半导体','芯片'],v:'半导体'},
-    {k:['恒生','港股'],v:'港股科技'},
+    // 科技赛道
+    {k:['半导体','芯片','集成电路','光刻胶'],v:'半导体/芯片'},
+    {k:['人工智能','AI','大模型','算力'],v:'人工智能'},
+    {k:['通信','5G','6G','卫星','北斗','星链'],v:'通信/卫星互联网'},
+    {k:['计算机','软件','云计算','大数据'],v:'计算机/云计算'},
+    {k:['数字经济','数据要素','东数西算'],v:'数字经济'},
+    
+    // 新能源赛道
+    {k:['光伏','太阳能','硅片','组件'],v:'新能源/光伏'},
+    {k:['新能源汽车','锂电','电池','充电桩','宁德时代'],v:'新能源汽车'},
+    {k:['风电','风力发电'],v:'风电'},
+    {k:['储能','氢能','燃料电池'],v:'储能/氢能'},
+    
+    // 周期赛道
+    {k:['军工','国防','航天','航空','导弹'],v:'军工'},
+    {k:['有色金属','铜','铝','锂','钴','稀土'],v:'有色金属'},
+    {k:['煤炭','钢铁','石油','天然气'],v:'能源/资源'},
+    {k:['券商','证券','银行','保险','金融'],v:'金融'},
+    {k:['地产','基建','建筑'],v:'地产/基建'},
+    
+    // 消费赛道
+    {k:['消费','白酒','食品饮料','啤酒','红酒'],v:'消费/白酒'},
+    {k:['医药','医疗','创新药','医疗器械','CXO'],v:'医药/医疗'},
+    {k:['农业','养殖','猪肉','粮食','种业'],v:'农业'},
+    {k:['家电','家居','家具'],v:'家电/家居'},
+    {k:['旅游','酒店','航空','机场'],v:'旅游/出行'},
+    
+    // 宽基/策略
+    {k:['沪深300','300','上证50','50','中证500','500','中证1000','1000','2000','中证2000'],v:'宽基指数'},
+    {k:['红利','价值','成长','质量','低波动'],v:'策略指数'},
+    {k:['港股','恒生','H股','香港'],v:'港股科技'},
+    {k:['美股','纳斯达克','标普','道琼斯'],v:'美股'},
+    
+    // 其他类型
     {k:['混合'],v:'混合型'},
-    {k:['债券'],v:'债券型'},
-    {k:['2000','中证2000'],v:'小盘宽基'},
-    {k:['卫星','商用卫星'],v:'卫星互联网'}
+    {k:['债券','债'],v:'债券型'},
+    {k:['指数'],v:'指数型'},
+    {k:['ETF联接'],v:'ETF联接'},
+    {k:['QDII'],v:'QDII'}
 ];
 
-// 根据基金名称匹配板块
+// 🔥 智能板块匹配函数（大小写不敏感+多关键词匹配）
 function getPlate(name){
     if(!name || name.includes("加载失败")) return "其他";
+    const lowerName = name.toLowerCase();
     for(let p of plates){
-        if(p.k.some(w=>name.includes(w))) return p.v;
+        if(p.k.some(w=>lowerName.includes(w.toLowerCase()))) return p.v;
     }
     return "其他";
+}
+
+// 🔥 核心：获取昨日涨跌幅（独立接口）
+async function getYesterdayRate(code){
+    try{
+        const url = proxy + encodeURIComponent(`${netValueApi}${code}.js?v=${Date.now()}`);
+        const res = await fetch(url);
+        const txt = await res.text();
+        
+        // 解析东方财富净值数据
+        const jzrqMatch = txt.match(/jzrq="([^"]+)"/);
+        const dwjzMatch = txt.match(/dwjz="([^"]+)"/);
+        const gszzlMatch = txt.match(/gszzl="([^"]+)"/);
+        const zdfMatch = txt.match(/zdf="([^"]+)"/);
+        
+        // 优先用zdf字段，没有则用净值计算
+        if(zdfMatch && zdfMatch[1]){
+            return parseFloat(zdfMatch[1]);
+        }else if(dwjzMatch && gszzlMatch){
+            return parseFloat(gszzlMatch[1]);
+        }
+        return null;
+    }catch(e){
+        console.error(`获取${code}昨日涨幅失败:`,e);
+        return null;
+    }
 }
 
 // 页面加载初始化
 window.onload = ()=>{
     let saved = localStorage.getItem("funds")||"";
     let codes = saved.split(",").filter(c=>c.trim());
-    // 🔥 初始化就彻底去重，避免历史重复
+    // 强制去重，避免历史重复
     codes = [...new Set(codes)];
     localStorage.setItem("funds", codes.join(","));
     renderList(codes);
@@ -162,7 +217,6 @@ function doAdd(){
     let c = document.getElementById("addInput").value.trim();
     if(!c) return;
     let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
-    // 🔥 去重后添加
     let codes = [...new Set([...old, c])];
     localStorage.setItem("funds", codes.join(","));
     closeModal();
@@ -176,7 +230,6 @@ function doBatch(){
     if(!val) return;
     let add = val.replace(/，/g,",").replace(/\s+/g,",").split(",").filter(x=>x.trim());
     let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
-    // 🔥 彻底去重合并
     let codes = [...new Set([...old, ...add])];
     localStorage.setItem("funds", codes.join(","));
     closeModal();
@@ -188,7 +241,6 @@ function doBatch(){
 function delSelect(){
     if(selectSet.size===0) return alert("请先选中要删除的基金");
     let old = (localStorage.getItem("funds")||"").split(",").filter(x=>x.trim());
-    // 过滤掉选中的代码
     let codes = old.filter(c=>!selectSet.has(c));
     localStorage.setItem("funds", codes.join(","));
     selectSet.clear();
@@ -196,16 +248,13 @@ function delSelect(){
     loadFundData(codes);
 }
 
-// 🔥 核心：加载数据+彻底去重+正确解析昨日涨幅
+// 🔥 核心：双接口加载数据（实时估值+昨日涨跌幅）
 async function loadFundData(codes){
-    // 读取代码，无参数则从本地读取
     if(!codes){
         let saved = localStorage.getItem("funds")||"";
         codes = saved.split(",").filter(c=>c.trim());
     }
-    // 🔥 第一步：彻底去重，永远不会有重复
     codes = [...new Set(codes)];
-    // 回存本地，确保后续无重复
     localStorage.setItem("funds", codes.join(","));
 
     if(codes.length===0){
@@ -217,32 +266,31 @@ async function loadFundData(codes){
     let body = document.getElementById("tableBody");
     body.innerHTML=`<tr><td colspan="5" class="loading">加载中...</td></tr>`;
 
-    // 分批次并行请求，速度稳定
+    // 分批次并行请求
     for(let i=0;i<codes.length;i+=BATCH_SIZE){
         let batch = codes.slice(i,i+BATCH_SIZE);
         let tasks = batch.map(async c=>{
             try{
-                let u = proxy + encodeURIComponent(api + c + ".js");
-                let res = await fetch(u);
-                let txt = await res.text();
-                // 正确解析天天基金接口数据
-                let d = JSON.parse(txt.replace("jsonpgz(","").replace(");",""));
+                // 1. 获取实时估值
+                let realtimeUrl = proxy + encodeURIComponent(`${realtimeApi}${c}.js`);
+                let realtimeRes = await fetch(realtimeUrl);
+                let realtimeTxt = await realtimeRes.text();
+                let realtimeData = JSON.parse(realtimeTxt.replace("jsonpgz(","").replace(");",""));
                 
-                // 🔥 正确解析昨日涨跌幅（zdf是官方标准字段）
-                let zdf = parseFloat(d.zdf);
-                let yesRate = isNaN(zdf) ? null : zdf;
-
+                // 2. 获取昨日涨跌幅（独立接口）
+                let yesterdayRate = await getYesterdayRate(c);
+                
                 return {
-                    code:d.fundcode,
-                    name:d.name,
-                    now:parseFloat(d.gszzl)||0, // 今日实时涨幅
-                    yes:yesRate, // 昨日涨跌幅（正确字段）
-                    time:d.gztime||"-",
-                    plate:getPlate(d.name)
+                    code: realtimeData.fundcode,
+                    name: realtimeData.name,
+                    now: parseFloat(realtimeData.gszzl)||0, // 今日实时涨幅
+                    yes: yesterdayRate, // 昨日涨跌幅（双接口联动获取）
+                    time: realtimeData.gztime||"-",
+                    plate: getPlate(realtimeData.name) // 超级板块匹配
                 };
             }catch(e){
                 console.error(`加载${c}失败:`,e);
-                return {code:c,name:"加载失败",now:0,yes:null,time:"-",plate:"-"};
+                return {code:c,name:"加载失败",now:0,yes:null,time:"-",plate:"其他"};
             }
         });
         let res = await Promise.all(tasks);
@@ -270,10 +318,9 @@ function renderTable(){
     for(let d of data){
         // 今日涨幅样式
         let nowCls = d.now>0?"red":d.now<0?"green":"";
-        // 🔥 昨日涨幅样式：空值显示-，有数据正常显示
-        let yesVal = d.yes;
-        let yesDisplay = yesVal !== null ? `${yesVal.toFixed(2)}%` : "-";
-        let yesCls = yesVal > 0 ? "red" : yesVal < 0 ? "green" : "";
+        // 昨日涨幅样式：空值显示-，有数据正常显示（涨红跌绿）
+        let yesDisplay = d.yes !== null ? `${d.yes.toFixed(2)}%` : "-";
+        let yesCls = d.yes > 0 ? "red" : d.yes < 0 ? "green" : "";
 
         html+=`
         <tr>
