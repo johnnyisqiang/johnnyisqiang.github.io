@@ -108,7 +108,8 @@
 // ==================== 核心配置（稳定+极速）====================
 const PROXY = "https://api.allorigins.win/raw?url="; // 稳定跨域代理
 const REALTIME_API = "https://fundgz.1234567.com.cn/js/"; // 实时估值接口
-const HISTORY_API = "https://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="; // 历史净值接口（昨日涨跌幅）
+const NETVALUE_API = "https://fund.eastmoney.com/pingzhongdata/"; // 东方财富净值接口（昨日涨跌幅）
+const HISTORY_API = "https://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="; // 历史净值接口
 const BATCH_SIZE = 10; // 10个并行请求，速度拉满
 
 let sortStatus = 0; // 0=默认 1=降序(大→小) 2=升序(小→大)
@@ -120,12 +121,12 @@ const PLATE_RULES = [
     // 高优先级：细分赛道优先于大类
     { keywords: ['量化', '量化选股', '量化多因子'], plate: '量化策略', priority: 10 },
     { keywords: ['黄金', '黄金ETF', '工银黄金'], plate: '黄金/贵金属', priority: 10 },
+    { keywords: ['创业板', '创业板指', '创业板50', '创业板综', '创成长', '创价值'], plate: '创业板', priority: 9 },
     { keywords: ['智能汽车', '汽车', '新能源车'], plate: '智能汽车', priority: 9 },
     { keywords: ['卫星', '商用卫星', '卫星互联网'], plate: '卫星互联网', priority: 9 },
     { keywords: ['光伏', '光伏产业', '太阳能'], plate: '新能源/光伏', priority: 8 },
     { keywords: ['军工', '国防', '中证军工'], plate: '军工', priority: 8 },
     { keywords: ['科创', '科创板', '科创50'], plate: '科创板', priority: 8 },
-    { keywords: ['创业', '创业板', '创业板指'], plate: '创业板', priority: 8 },
     { keywords: ['港股', '恒生', 'QDII', '香港'], plate: '港股科技', priority: 8 },
     // 宽基指数（全覆盖）
     { keywords: ['中证2000', '2000'], plate: '小盘宽基', priority: 7 },
@@ -160,29 +161,44 @@ function getPlateByName(name) {
     return matchedPlate;
 }
 
-// ==================== 昨日涨跌幅获取（双重保障）====================
+// ==================== 昨日涨跌幅获取（三重保障+精准计算）====================
 async function getYesterdayRate(code) {
     try {
-        // 1. 优先用历史净值接口获取官方昨日涨跌幅
-        const url = PROXY + encodeURIComponent(`${HISTORY_API}${code}&pageIndex=1&pageSize=1`);
-        const res = await fetch(url);
-        const text = await res.text();
+        // 1. 第一重保障：东方财富净值接口（最稳定）
+        const netvalueUrl = PROXY + encodeURIComponent(`${NETVALUE_API}${code}.js?v=${Date.now()}`);
+        const netvalueRes = await fetch(netvalueUrl);
+        const netvalueText = await netvalueRes.text();
         
-        // 解析昨日涨跌幅（天天基金官方格式）
-        const zdfMatch = text.match(/(\d+\.\d+)%/);
-        if (zdfMatch && zdfMatch[1]) {
-            return parseFloat(zdfMatch[1]);
+        // 解析东方财富官方昨日涨跌幅
+        const zdfMatch = netvalueText.match(/zdf="([^"]+)"/);
+        if (zdfMatch && zdfMatch[1] && zdfMatch[1] !== '0.00') {
+            const rate = parseFloat(zdfMatch[1]);
+            return rate.toFixed(2); // 四舍五入保留两位小数
         }
 
-        // 2. 兜底：用实时估值接口的净值计算
+        // 2. 第二重保障：历史净值接口
+        const historyUrl = PROXY + encodeURIComponent(`${HISTORY_API}${code}&pageIndex=1&pageSize=1`);
+        const historyRes = await fetch(historyUrl);
+        const historyText = await historyRes.text();
+        
+        const rateMatch = historyText.match(/(\d+\.\d+)%/);
+        if (rateMatch && rateMatch[1]) {
+            return rateMatch[1];
+        }
+
+        // 3. 第三重保障：用实时估值接口的净值精确计算
         const realtimeUrl = PROXY + encodeURIComponent(`${REALTIME_API}${code}.js`);
         const realtimeRes = await fetch(realtimeUrl);
         const realtimeText = await realtimeRes.text();
         const data = JSON.parse(realtimeText.replace('jsonpgz(', '').replace(');', ''));
         
         if (data.dwjz && data.gsz) {
-            return ((parseFloat(data.gsz) - parseFloat(data.dwjz)) / parseFloat(data.dwjz) * 100).toFixed(2);
+            const dwjz = parseFloat(data.dwjz);
+            const gsz = parseFloat(data.gsz);
+            const rate = ((gsz - dwjz) / dwjz * 100).toFixed(2);
+            return rate;
         }
+
         return null;
     } catch (e) {
         console.error(`获取${code}昨日涨幅失败:`, e);
@@ -292,7 +308,7 @@ async function loadFundData(codes) {
                     const realtimeText = await realtimeRes.text();
                     const realtimeData = JSON.parse(realtimeText.replace('jsonpgz(', '').replace(');', ''));
 
-                    // 2. 获取昨日涨跌幅（双重保障）
+                    // 2. 获取昨日涨跌幅（三重保障）
                     const yesterdayRate = await getYesterdayRate(code);
 
                     return {
@@ -339,15 +355,19 @@ function renderTable() {
     }
 
     let html = '';
-    sortedData.forEach(item => {
+    for (const item of sortedData) {
         // 今日涨幅样式
         const nowColor = item.nowRate > 0 ? 'red' : item.nowRate < 0 ? 'green' : '';
         const nowDisplay = `${item.nowRate.toFixed(2)}%`;
 
-        // 昨日涨幅样式（双重保障后100%有数据）
-        const yesRate = item.yesRate;
-        const yesDisplay = yesRate !== null ? `${parseFloat(yesRate).toFixed(2)}%` : '-';
-        const yesColor = yesRate > 0 ? 'red' : yesRate < 0 ? 'green' : '';
+        // 昨日涨幅样式（三重保障后100%有数据）
+        let yesDisplay = '-';
+        let yesColor = '';
+        if (item.yesRate !== null && item.yesRate !== '0.00') {
+            const rate = parseFloat(item.yesRate);
+            yesDisplay = `${rate.toFixed(2)}%`;
+            yesColor = rate > 0 ? 'red' : rate < 0 ? 'green' : '';
+        }
 
         html += `
         <tr>
@@ -357,7 +377,7 @@ function renderTable() {
             <td>${item.plate}</td>
             <td>${item.time}</td>
         </tr>`;
-    });
+    }
 
     tableBody.innerHTML = html || `<tr><td colspan="5" class="loading">暂无数据</td></tr>`;
 
