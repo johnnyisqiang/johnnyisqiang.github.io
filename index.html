@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>基金实时监控</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"微软雅黑",system-ui;}
+        body{padding:15px;background:#f6f8fa;}
+        h1{text-align:center;margin:20px 0;color:#2d3748;}
+        table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+        th{background:#2ecc71;color:white;padding:12px;text-align:left;}
+        td{padding:12px;border-bottom:1px solid #eee;}
+        .red{color:#e53e3e;font-weight:bold;}
+        .green{color:#38a169;font-weight:bold;}
+        .tips{text-align:center;margin:10px 0;color:#666;font-size:12px;}
+    </style>
+    <!-- 每10秒自动刷新，无需手动点 -->
+    <meta http-equiv="refresh" content="10">
+</head>
+<body>
+    <h1>💰 基金实时监控</h1>
+    <p class="tips">数据来自天天基金，每10秒自动更新</p>
+    <table id="fundTable"></table>
+
+<script>
+// ============== 在这里修改你要监控的基金代码 ==============
+const fundCodes = ["005693", "161725", "003096", "161028"];
+// ==========================================================
+
+async function loadFundData(){
+    const table = document.getElementById("fundTable");
+    let html = `<tr><th>基金名称</th><th>实时涨幅</th><th>更新时间</th></tr>`;
+    
+    for(let code of fundCodes){
+        try{
+            let res = await fetch(`https://fundgz.1234567.com.cn/js/${code}.js`, {
+                headers: {"Referer": "https://fundgz.1234567.com.cn/"}
+            });
+            let text = await res.text();
+            // 解析天天基金接口返回的js格式数据
+            let data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
+            
+            let rate = parseFloat(data.gszzl);
+            let color = rate > 0 ? "red" : "green";
+            
+            html += `
+            <tr>
+                <td>${data.name}</td>
+                <td class="${color}">${data.gszzl}%</td>
+                <td>${data.gztime}</td>
+            </tr>`;
+        }catch(e){
+            console.error(`加载${code}失败:`, e);
+            html += `<tr><td>加载失败(${code})</td><td>-</td><td>-</td></tr>`;
+        }
+    }
+    table.innerHTML = html;
+}
+
+// 页面加载立即执行
+loadFundData();
+</script>
+</body>
+</html>
