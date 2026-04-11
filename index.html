@@ -5,208 +5,43 @@
     <title>基金实时监控助手</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "微软雅黑", system-ui, -apple-system, sans-serif;
-        }
-        body {
-            background-color: #f0f2f5;
-            height: 100vh;
-            overflow: hidden;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "微软雅黑", system-ui, -apple-system, sans-serif; }
+        body { background-color: #f0f2f5; height: 100vh; overflow: hidden; }
         /* 顶部标题栏 */
-        .top-bar {
-            height: 48px;
-            background-color: #409EFF;
-            color: white;
-            line-height: 48px;
-            padding: 0 16px;
-            font-size: 16px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        /* 主容器：flex布局，左侧列表+右侧表格 */
-        .main-container {
-            display: flex;
-            height: calc(100vh - 48px);
-            padding: 12px;
-            gap: 12px;
-        }
-        /* 左侧自选基金栏 */
-        .left-panel {
-            width: 220px;
-            background-color: #ffffff;
-            border: 1px solid #dcdfe6;
-            border-radius: 4px;
-            display: flex;
-            flex-direction: column;
-        }
-        .left-title {
-            height: 48px;
-            line-height: 48px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: 600;
-            color: #303133;
-            border-bottom: 1px solid #dcdfe6;
-        }
-        .fund-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-        .fund-item {
-            padding: 8px 12px;
-            margin-bottom: 4px;
-            background-color: #f5f7fa;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .fund-item:hover {
-            background-color: #e4e7ed;
-        }
-        .fund-item.selected {
-            background-color: #c6e2ff;
-            color: #409EFF;
-            font-weight: 500;
-        }
-        .btn-group {
-            padding: 8px;
-            border-top: 1px solid #dcdfe6;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .btn {
-            height: 40px;
-            background-color: #409EFF;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .btn:hover {
-            background-color: #66b1ff;
-        }
-        .btn:active {
-            background-color: #3a8ee6;
-        }
+        .top-bar { height: 48px; background-color: #409EFF; color: white; line-height: 48px; padding: 0 16px; font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        /* 主容器 */
+        .main-container { display: flex; height: calc(100vh - 48px); padding: 12px; gap: 12px; }
+        /* 左侧自选栏 */
+        .left-panel { width: 220px; background: #fff; border: 1px solid #dcdfe6; border-radius: 4px; display: flex; flex-direction: column; }
+        .left-title { height: 48px; line-height: 48px; text-align: center; font-size: 18px; font-weight: 600; color: #303133; border-bottom: 1px solid #dcdfe6; }
+        .fund-list { flex: 1; overflow-y: auto; padding: 8px; }
+        .fund-item { padding: 8px 12px; margin-bottom: 4px; background: #f5f7fa; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        .fund-item:hover { background: #e4e7ed; }
+        .fund-item.selected { background: #c6e2ff; color: #409EFF; font-weight: 500; }
+        .btn-group { padding: 8px; border-top: 1px solid #dcdfe6; display: flex; flex-direction: column; gap: 8px; }
+        .btn { height: 40px; background: #409EFF; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn:hover { background: #66b1ff; }
         /* 右侧表格栏 */
-        .right-panel {
-            flex: 1;
-            background-color: #ffffff;
-            border: 1px solid #dcdfe6;
-            border-radius: 4px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .table-container {
-            flex: 1;
-            overflow: auto;
-            padding: 8px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-        th {
-            background-color: #409EFF;
-            color: white;
-            height: 40px;
-            padding: 0 12px;
-            font-weight: 500;
-            font-size: 15px;
-            border: 1px solid #dcdfe6;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-        }
-        th:hover {
-            background-color: #66b1ff;
-        }
-        td {
-            height: 40px;
-            padding: 0 12px;
-            border: 1px solid #dcdfe6;
-            font-size: 14px;
-            color: #606266;
-        }
-        tr:hover td {
-            background-color: #f5f7fa;
-        }
-        .red {
-            color: #F56C6C;
-            font-weight: 600;
-        }
-        .green {
-            color: #67C23A;
-            font-weight: 600;
-        }
-        .sort-arrow {
-            font-size: 12px;
-            margin-left: 4px;
-        }
+        .right-panel { flex: 1; background: #fff; border: 1px solid #dcdfe6; border-radius: 4px; display: flex; flex-direction: column; overflow: hidden; }
+        .table-container { flex: 1; overflow: auto; padding: 8px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: #409EFF; color: #fff; height: 40px; padding: 0 12px; font-weight: 500; font-size: 15px; border: 1px solid #dcdfe6; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+        th:hover { background: #66b1ff; }
+        td { height: 40px; padding: 0 12px; border: 1px solid #dcdfe6; font-size: 14px; color: #606266; }
+        tr:hover td { background: #f5f7fa; }
+        .red { color: #F56C6C; font-weight: 600; }
+        .green { color: #67C23A; font-weight: 600; }
+        .sort-arrow { font-size: 12px; margin-left: 4px; }
         /* 弹窗样式 */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(0,0,0,0.5);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 999;
-        }
-        .modal-content {
-            width: 400px;
-            background-color: white;
-            border-radius: 8px;
-            padding: 20px;
-        }
-        .modal-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: #303133;
-        }
-        .modal-input {
-            width: 100%;
-            height: 100px;
-            padding: 12px;
-            border: 1px solid #dcdfe6;
-            border-radius: 4px;
-            font-size: 14px;
-            resize: none;
-            margin-bottom: 16px;
-        }
-        .modal-btns {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-        .btn-cancel {
-            background-color: #f5f7fa;
-            color: #606266;
-        }
-        .btn-cancel:hover {
-            background-color: #e4e7ed;
-        }
+        .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 999; }
+        .modal-content { width: 400px; background: #fff; border-radius: 8px; padding: 20px; }
+        .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #303133; }
+        .modal-input { width: 100%; height: 100px; padding: 12px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; resize: none; margin-bottom: 16px; }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 12px; }
+        .btn-cancel { background: #f5f7fa; color: #606266; }
+        .btn-cancel:hover { background: #e4e7ed; }
+        /* 加载状态 */
+        .loading { text-align: center; padding: 20px; color: #909399; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -255,7 +90,9 @@
                             <th>更新时间</th>
                         </tr>
                     </thead>
-                    <tbody id="fundTableBody"></tbody>
+                    <tbody id="fundTableBody">
+                        <tr><td colspan="5" class="loading">正在加载基金数据...</td></tr>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -286,224 +123,234 @@
     </div>
 
 <script>
-// 配置项
-const proxy = "https://api.codetabs.com/v1/proxy?quest=";
-const baseUrl = "https://fundgz.1234567.com.cn/js/";
-// 排序状态：0=默认 1=降序(大→小) 2=升序(小→大)
-let sortStatus = 0;
-// 基金数据缓存
-let fundDataCache = [];
-// 选中的基金代码
-let selectedCodes = new Set();
+// ==================== 核心配置 ====================
+const PROXY = "https://api.allorigins.win/raw?url="; // 稳定跨域代理
+const BASE_URL = "https://fundgz.1234567.com.cn/js/"; // 天天基金官方接口
+const BATCH_SIZE = 10; // 分批次并行请求，一次10个，避免被拦截
+let sortStatus = 0; // 排序状态：0=默认 1=降序(大→小) 2=升序(小→大)
+let fundDataCache = []; // 基金数据缓存
+let selectedCodes = new Set(); // 选中的基金代码
 
-// 页面加载：自动读取本地保存的基金
+// ==================== 持仓板块智能匹配规则 ====================
+const PLATE_MAP = [
+    { keywords: ['军工', '中证军工'], plate: '军工' },
+    { keywords: ['光伏', '光伏产业'], plate: '光伏' },
+    { keywords: ['科创', '科创板'], plate: '科创板' },
+    { keywords: ['2000', '中证2000'], plate: '小盘宽基' },
+    { keywords: ['卫星', '商用卫星'], plate: '卫星互联网' },
+    { keywords: ['恒生科技'], plate: '港股科技' },
+    { keywords: ['创业', '创业板'], plate: '创业板' },
+    { keywords: ['制造', '先进制造'], plate: '高端制造' },
+    { keywords: ['消费'], plate: '消费' },
+    { keywords: ['医药', '医疗'], plate: '医药医疗' },
+    { keywords: ['新能源'], plate: '新能源' },
+    { keywords: ['金融', '银行', '证券'], plate: '金融地产' },
+    { keywords: ['混合'], plate: '混合型' },
+    { keywords: ['债券'], plate: '债券型' }
+];
+
+// 根据基金名称自动匹配板块
+function getPlateByName(name) {
+    for (const item of PLATE_MAP) {
+        if (item.keywords.some(k => name.includes(k))) {
+            return item.plate;
+        }
+    }
+    return "其他板块";
+}
+
+// ==================== 页面加载初始化 ====================
 window.onload = function () {
-    let savedCodes = localStorage.getItem("fundCodes");
+    const savedCodes = localStorage.getItem("fundCodes");
     if (savedCodes) {
-        let codes = savedCodes.split(",").filter(c => c);
+        const codes = savedCodes.split(",").filter(c => c);
         renderFundList(codes);
         loadFundData(codes);
     } else {
-        // 首次加载，显示空列表
         renderFundList([]);
+        document.getElementById("fundTableBody").innerHTML = `<tr><td colspan="5" class="loading">暂无自选基金，请添加</td></tr>`;
     }
 };
 
-// ==================== 左侧列表相关 ====================
-// 渲染左侧自选基金列表
+// ==================== 左侧列表操作 ====================
+// 渲染左侧自选列表
 function renderFundList(codes) {
-    let listEl = document.getElementById("fundList");
+    const listEl = document.getElementById("fundList");
     listEl.innerHTML = "";
     codes.forEach(code => {
-        let item = document.createElement("div");
+        const item = document.createElement("div");
         item.className = "fund-item" + (selectedCodes.has(code) ? " selected" : "");
         item.dataset.code = code;
-        item.onclick = function () {
-            // 切换选中状态
-            if (selectedCodes.has(code)) {
-                selectedCodes.delete(code);
-                item.classList.remove("selected");
-            } else {
-                selectedCodes.add(code);
-                item.classList.add("selected");
-            }
+        item.onclick = () => {
+            selectedCodes.has(code) ? selectedCodes.delete(code) : selectedCodes.add(code);
+            item.classList.toggle("selected");
         };
-        // 先显示代码，加载数据后更新名称
         item.textContent = code;
         listEl.appendChild(item);
     });
 }
 
-// 打开添加基金弹窗
-function openAddModal() {
-    document.getElementById("addModal").style.display = "flex";
-    document.getElementById("addInput").value = "";
-    document.getElementById("addInput").focus();
-}
-function closeAddModal() {
-    document.getElementById("addModal").style.display = "none";
-}
+// 打开/关闭添加弹窗
+function openAddModal() { document.getElementById("addModal").style.display = "flex"; document.getElementById("addInput").focus(); }
+function closeAddModal() { document.getElementById("addModal").style.display = "none"; }
 // 确认添加单个基金
 function confirmAdd() {
-    let input = document.getElementById("addInput").value.trim();
+    const input = document.getElementById("addInput").value.trim();
     if (!input) return;
-    // 读取现有代码
-    let savedCodes = localStorage.getItem("fundCodes") || "";
+    const savedCodes = localStorage.getItem("fundCodes") || "";
     let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
-    // 去重添加
-    if (!codes.includes(input)) {
-        codes.push(input);
-        localStorage.setItem("fundCodes", codes.join(","));
-    }
+    if (!codes.includes(input)) codes.push(input);
+    codes = [...new Set(codes)]; // 去重
+    localStorage.setItem("fundCodes", codes.join(","));
     closeAddModal();
     renderFundList(codes);
     loadFundData(codes);
 }
 
-// 打开批量添加弹窗
-function openBatchModal() {
-    document.getElementById("batchModal").style.display = "flex";
-    document.getElementById("batchInput").value = "";
-    document.getElementById("batchInput").focus();
-}
-function closeBatchModal() {
-    document.getElementById("batchModal").style.display = "none";
-}
+// 打开/关闭批量添加弹窗
+function openBatchModal() { document.getElementById("batchModal").style.display = "flex"; document.getElementById("batchInput").focus(); }
+function closeBatchModal() { document.getElementById("batchModal").style.display = "none"; }
 // 确认批量添加
 function confirmBatchAdd() {
-    let input = document.getElementById("batchInput").value.trim();
+    const input = document.getElementById("batchInput").value.trim();
     if (!input) return;
-    // 格式化代码
-    let newCodes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
-    // 读取现有代码
-    let savedCodes = localStorage.getItem("fundCodes") || "";
+    const newCodes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
+    const savedCodes = localStorage.getItem("fundCodes") || "";
     let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
-    // 合并+去重
-    let mergedCodes = [...new Set([...codes, ...newCodes])];
-    localStorage.setItem("fundCodes", mergedCodes.join(","));
+    codes = [...new Set([...codes, ...newCodes])]; // 合并+去重
+    localStorage.setItem("fundCodes", codes.join(","));
     closeBatchModal();
-    renderFundList(mergedCodes);
-    loadFundData(mergedCodes);
+    renderFundList(codes);
+    loadFundData(codes);
 }
 
-// 删除选中的基金
+// 删除选中基金
 function deleteSelected() {
-    if (selectedCodes.size === 0) {
-        alert("请先选中要删除的基金");
-        return;
-    }
-    // 读取现有代码
-    let savedCodes = localStorage.getItem("fundCodes") || "";
+    if (selectedCodes.size === 0) { alert("请先选中要删除的基金"); return; }
+    const savedCodes = localStorage.getItem("fundCodes") || "";
     let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
-    // 过滤掉选中的代码
-    let newCodes = codes.filter(c => !selectedCodes.has(c));
-    localStorage.setItem("fundCodes", newCodes.join(","));
-    // 清空选中
+    codes = codes.filter(c => !selectedCodes.has(c));
+    localStorage.setItem("fundCodes", codes.join(","));
     selectedCodes.clear();
-    renderFundList(newCodes);
-    loadFundData(newCodes);
+    renderFundList(codes);
+    loadFundData(codes);
 }
 
-// ==================== 数据加载与表格渲染 ====================
-// 加载基金数据
+// ==================== 数据加载（分批次并行+极速加载） ====================
 async function loadFundData(codes) {
-    // 如果没传codes，从本地读取
+    // 读取本地代码
     if (!codes) {
-        let savedCodes = localStorage.getItem("fundCodes");
+        const savedCodes = localStorage.getItem("fundCodes");
         codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
     }
     if (codes.length === 0) {
-        document.getElementById("fundTableBody").innerHTML = "";
+        document.getElementById("fundTableBody").innerHTML = `<tr><td colspan="5" class="loading">暂无自选基金，请添加</td></tr>`;
         return;
     }
 
+    // 彻底去重
+    codes = [...new Set(codes)];
     fundDataCache = [];
-    // 遍历加载每个基金
-    for (let code of codes) {
-        try {
-            let url = proxy + encodeURIComponent(baseUrl + code + ".js");
-            let res = await fetch(url);
-            let text = await res.text();
-            // 解析接口数据
-            let data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
-            
-            // 提取正确字段（100%有数据，无undefined）
-            let fundData = {
-                code: data.fundcode,
-                name: data.name,
-                nowRate: parseFloat(data.gszzl) || 0,   // 今日涨幅
-                yesRate: parseFloat(data.zdf) || 0,     // 昨日涨幅
-                plate: data.fundtype || "未知板块",      // 持仓板块（基金类型）
-                time: data.gztime || "无时间"
-            };
-            fundDataCache.push(fundData);
+    document.getElementById("fundTableBody").innerHTML = `<tr><td colspan="5" class="loading">正在加载${codes.length}只基金数据...</td></tr>`;
 
-            // 更新左侧列表的基金名称
-            let listItems = document.querySelectorAll(`.fund-item[data-code="${code}"]`);
-            if (listItems.length > 0) {
-                listItems[0].textContent = `${data.name} (${code})`;
+    // 分批次并行请求
+    for (let i = 0; i < codes.length; i += BATCH_SIZE) {
+        const batch = codes.slice(i, i + BATCH_SIZE);
+        // 并行请求当前批次
+        const batchResults = await Promise.allSettled(
+            batch.map(code => fetch(PROXY + encodeURIComponent(BASE_URL + code + ".js"))
+                .then(res => res.text())
+                .then(text => {
+                    // 正确解析天天基金接口数据
+                    const cleanText = text.replace("jsonpgz(", "").replace(");", "");
+                    const data = JSON.parse(cleanText);
+                    return {
+                        code: data.fundcode,
+                        name: data.name,
+                        nowRate: parseFloat(data.gszzl) || null, // 今日涨幅
+                        yesRate: parseFloat(data.zdf) || null, // 昨日涨幅
+                        time: data.gztime || "无时间"
+                    };
+                })
+            )
+        );
+
+        // 处理批次结果
+        batchResults.forEach((result, idx) => {
+            const code = batch[idx];
+            if (result.status === "fulfilled") {
+                const fundData = result.value;
+                fundDataCache.push(fundData);
+                // 更新左侧列表名称
+                const listItem = document.querySelector(`.fund-item[data-code="${code}"]`);
+                if (listItem) listItem.textContent = `${fundData.name} (${code})`;
+            } else {
+                // 加载失败兜底
+                fundDataCache.push({
+                    code: code,
+                    name: `加载失败(${code})`,
+                    nowRate: null,
+                    yesRate: null,
+                    time: "-"
+                });
             }
-        } catch (e) {
-            console.error(`加载${code}失败:`, e);
-            fundDataCache.push({
-                code: code,
-                name: `加载失败(${code})`,
-                nowRate: 0,
-                yesRate: 0,
-                plate: "-",
-                time: "-"
-            });
-        }
+        });
+
+        // 每加载完一批，渲染一次，提升体验
+        renderTable();
     }
-    // 渲染表格
-    renderTable();
 }
 
+// ==================== 表格渲染+排序 ====================
 // 切换排序模式
 function changeSort() {
     sortStatus = (sortStatus + 1) % 3;
     renderTable();
 }
 
-// 渲染表格（根据排序状态）
+// 渲染表格
 function renderTable() {
-    let tableBody = document.getElementById("fundTableBody");
+    const tableBody = document.getElementById("fundTableBody");
     let sortedData = [...fundDataCache];
 
     // 排序逻辑
     if (sortStatus === 1) {
-        sortedData.sort((a, b) => b.nowRate - a.nowRate); // 降序：大→小
+        sortedData.sort((a, b) => (b.nowRate ?? -Infinity) - (a.nowRate ?? -Infinity)); // 降序
     } else if (sortStatus === 2) {
-        sortedData.sort((a, b) => a.nowRate - b.nowRate); // 升序：小→大
+        sortedData.sort((a, b) => (a.nowRate ?? Infinity) - (b.nowRate ?? Infinity)); // 升序
     }
-    // sortStatus=0：默认顺序（按添加顺序）
 
     // 渲染表格内容
     let html = "";
     sortedData.forEach(item => {
-        let nowColor = item.nowRate > 0 ? "red" : item.nowRate < 0 ? "green" : "";
-        let yesColor = item.yesRate > 0 ? "red" : item.yesRate < 0 ? "green" : "";
-        
+        // 今日涨幅样式
+        const nowRate = item.nowRate;
+        const nowDisplay = nowRate !== null ? `${nowRate.toFixed(2)}%` : "-";
+        const nowColor = nowRate > 0 ? "red" : nowRate < 0 ? "green" : "";
+
+        // 昨日涨幅样式
+        const yesRate = item.yesRate;
+        const yesDisplay = yesRate !== null ? `${yesRate.toFixed(2)}%` : "-";
+        const yesColor = yesRate > 0 ? "red" : yesRate < 0 ? "green" : "";
+
+        // 自动匹配板块
+        const plate = item.name.includes("加载失败") ? "-" : getPlateByName(item.name);
+
         html += `
         <tr>
             <td>${item.name} (${item.code})</td>
-            <td class="${nowColor}">${item.nowRate.toFixed(2)}%</td>
-            <td class="${yesColor}">${item.yesRate.toFixed(2)}%</td>
-            <td>${item.plate}</td>
+            <td class="${nowColor}">${nowDisplay}</td>
+            <td class="${yesColor}">${yesDisplay}</td>
+            <td>${plate}</td>
             <td>${item.time}</td>
         </tr>`;
     });
-    tableBody.innerHTML = html;
+
+    tableBody.innerHTML = html || `<tr><td colspan="5" class="loading">暂无数据</td></tr>`;
 
     // 更新排序箭头
-    let arrow = document.getElementById("sortArrow");
-    if (sortStatus === 1) {
-        arrow.textContent = "↓";
-    } else if (sortStatus === 2) {
-        arrow.textContent = "↑";
-    } else {
-        arrow.textContent = "";
-    }
+    const arrow = document.getElementById("sortArrow");
+    arrow.textContent = sortStatus === 1 ? "↓" : sortStatus === 2 ? "↑" : "";
 }
 </script>
 </body>
