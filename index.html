@@ -15,52 +15,53 @@
         .red{color:#e53e3e;font-weight:bold;}
         .green{color:#38a169;font-weight:bold;}
     </style>
-    <!-- 每10秒自动刷新 -->
-    <meta http-equiv="refresh" content="10">
+    <meta http-equiv="refresh" content="15">
 </head>
 <body>
     <h1>💰 基金实时监控</h1>
-    <p class="tips">数据来自天天基金，每10秒自动更新</p>
+    <p class="tips">数据来自天天基金，每15秒自动更新</p>
     <table id="fundTable"></table>
 
 <script>
-// ============== 在这里修改你要监控的基金代码 ==============
+// 在这里修改你要监控的基金代码
 const fundCodes = ["005693", "161725", "003096", "161028"];
-// ==========================================================
-
-// 用代理解决跨域（allorigins 免费代理，稳定可用）
-const proxyUrl = "https://api.allorigins.win/get?url=";
+// 稳定可用的CORS代理
+const proxy = "https://api.codetabs.com/v1/proxy?quest=";
 const baseUrl = "https://fundgz.1234567.com.cn/js/";
 
-async function loadFundData(){
+async function loadFundData() {
     const table = document.getElementById("fundTable");
-    let html = `<tr><th>基金名称</th><th>实时涨幅</th><th>更新时间</th></tr>`;
-    
-    for(let code of fundCodes){
-        try{
-            // 拼接代理+接口地址，解决跨域
-            const targetUrl = encodeURIComponent(baseUrl + code + ".js");
-            const res = await fetch(proxyUrl + targetUrl);
-            const resData = await res.json();
-            const text = resData.contents;
+    table.innerHTML = `<tr><th>基金名称</th><th>实时涨幅</th><th>更新时间</th></tr>`;
+
+    for (const code of fundCodes) {
+        try {
+            // 拼接代理+接口，强制绕过跨域
+            const url = proxy + encodeURIComponent(baseUrl + code + ".js");
+            const res = await fetch(url, {
+                headers: {
+                    "Referer": "https://fundgz.1234567.com.cn/"
+                }
+            });
+            const text = await res.text();
             
-            // 解析天天基金接口数据
-            const data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
+            // 解析数据（兼容天天基金的js格式）
+            const cleanText = text.replace("jsonpgz(", "").replace(");", "");
+            const data = JSON.parse(cleanText);
+            
             const rate = parseFloat(data.gszzl);
             const color = rate > 0 ? "red" : "green";
             
-            html += `
+            table.innerHTML += `
             <tr>
                 <td>${data.name}</td>
                 <td class="${color}">${data.gszzl}%</td>
                 <td>${data.gztime}</td>
             </tr>`;
-        }catch(e){
+        } catch (e) {
             console.error(`加载${code}失败:`, e);
-            html += `<tr><td>加载失败(${code})</td><td>-</td><td>-</td></tr>`;
+            table.innerHTML += `<tr><td>加载失败(${code})</td><td>-</td><td>-</td></tr>`;
         }
     }
-    table.innerHTML = html;
 }
 
 // 页面加载立即执行
