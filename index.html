@@ -2,146 +2,508 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>基金实时监控</title>
+    <title>基金实时监控助手</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:微软雅黑,system-ui;}
-        body{padding:15px;background:#f6f7f9;}
-        .container{max-width:900px;margin:0 auto;}
-        h1{text-align:center;margin:20px 0;color:#333;}
-        .input-box{width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px;margin-bottom:10px;}
-        .btn{width:100%;padding:12px;background:#2ecc71;color:white;border:none;border-radius:8px;font-size:16px;margin-bottom:15px;cursor:pointer;}
-        .btn-refresh{background:#3498db;}
-        .tips{text-align:center;color:#666;font-size:14px;margin-bottom:10px;line-height:1.5;}
-        table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #00000010;}
-        th{background:#2ecc71;color:white;padding:12px;text-align:left;cursor:pointer;}
-        td{padding:12px;border-bottom:1px solid #eee;}
-        .red{color:#e74c3c;font-weight:bold;}
-        .green{color:#2ecc71;font-weight:bold;}
-        /* 排序箭头样式 */
-        .sort-arrow{font-size:12px;margin-left:5px;}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "微软雅黑", system-ui, -apple-system, sans-serif;
+        }
+        body {
+            background-color: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* 顶部标题栏 */
+        .top-bar {
+            height: 48px;
+            background-color: #409EFF;
+            color: white;
+            line-height: 48px;
+            padding: 0 16px;
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        /* 主容器：flex布局，左侧列表+右侧表格 */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 48px);
+            padding: 12px;
+            gap: 12px;
+        }
+        /* 左侧自选基金栏 */
+        .left-panel {
+            width: 220px;
+            background-color: #ffffff;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+        }
+        .left-title {
+            height: 48px;
+            line-height: 48px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #303133;
+            border-bottom: 1px solid #dcdfe6;
+        }
+        .fund-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .fund-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background-color: #f5f7fa;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .fund-item:hover {
+            background-color: #e4e7ed;
+        }
+        .fund-item.selected {
+            background-color: #c6e2ff;
+            color: #409EFF;
+            font-weight: 500;
+        }
+        .btn-group {
+            padding: 8px;
+            border-top: 1px solid #dcdfe6;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .btn {
+            height: 40px;
+            background-color: #409EFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn:hover {
+            background-color: #66b1ff;
+        }
+        .btn:active {
+            background-color: #3a8ee6;
+        }
+        /* 右侧表格栏 */
+        .right-panel {
+            flex: 1;
+            background-color: #ffffff;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            padding: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th {
+            background-color: #409EFF;
+            color: white;
+            height: 40px;
+            padding: 0 12px;
+            font-weight: 500;
+            font-size: 15px;
+            border: 1px solid #dcdfe6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        th:hover {
+            background-color: #66b1ff;
+        }
+        td {
+            height: 40px;
+            padding: 0 12px;
+            border: 1px solid #dcdfe6;
+            font-size: 14px;
+            color: #606266;
+        }
+        tr:hover td {
+            background-color: #f5f7fa;
+        }
+        .red {
+            color: #F56C6C;
+            font-weight: 600;
+        }
+        .green {
+            color: #67C23A;
+            font-weight: 600;
+        }
+        .sort-arrow {
+            font-size: 12px;
+            margin-left: 4px;
+        }
+        /* 弹窗样式 */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .modal-content {
+            width: 400px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #303133;
+        }
+        .modal-input {
+            width: 100%;
+            height: 100px;
+            padding: 12px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            font-size: 14px;
+            resize: none;
+            margin-bottom: 16px;
+        }
+        .modal-btns {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        .btn-cancel {
+            background-color: #f5f7fa;
+            color: #606266;
+        }
+        .btn-cancel:hover {
+            background-color: #e4e7ed;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>💰 基金实时监控</h1>
-        <p class="tips">批量输入基金代码，自动保存/去重 | 点击「实时涨幅」排序</p>
+    <!-- 顶部标题栏 -->
+    <div class="top-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg>
+        基金实时监控助手
+    </div>
 
-        <textarea class="input-box" id="fundInput" rows="4" placeholder="请输入基金代码，用逗号/空格分隔" oninput="localStorage.setItem('fundCodes', this.value)"></textarea>
-        <button class="btn btn-refresh" onclick="loadFundData()">🔄 手动刷新数据</button>
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 左侧自选基金栏 -->
+        <div class="left-panel">
+            <div class="left-title">📋 自选基金</div>
+            <div class="fund-list" id="fundList"></div>
+            <div class="btn-group">
+                <button class="btn" onclick="openAddModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>
+                    添加基金
+                </button>
+                <button class="btn" onclick="loadFundData()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"></path></svg>
+                    刷新数据
+                </button>
+                <button class="btn" onclick="deleteSelected()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg>
+                    删除选中
+                </button>
+                <button class="btn" onclick="openBatchModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"></path></svg>
+                    批量添加
+                </button>
+            </div>
+        </div>
 
-        <table id="fundTable">
-            <tr>
-                <th>基金名称</th>
-                <!-- 点击排序的表头 -->
-                <th onclick="changeSort()">实时涨幅 <span class="sort-arrow" id="sortArrow"></span></th>
-                <th>昨日涨跌幅</th>
-                <th>更新时间</th>
-            </tr>
-        </table>
+        <!-- 右侧表格栏 -->
+        <div class="right-panel">
+            <div class="table-container">
+                <table id="fundTable">
+                    <thead>
+                        <tr>
+                            <th>基金名称 (代码)</th>
+                            <th onclick="changeSort()">今日涨幅 <span class="sort-arrow" id="sortArrow"></span></th>
+                            <th>昨日涨幅</th>
+                            <th>持仓板块</th>
+                            <th>更新时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fundTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加基金弹窗 -->
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <div class="modal-title">添加基金</div>
+            <input type="text" class="modal-input" id="addInput" placeholder="请输入基金代码（如：005693）">
+            <div class="modal-btns">
+                <button class="btn btn-cancel" onclick="closeAddModal()">取消</button>
+                <button class="btn" onclick="confirmAdd()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批量添加弹窗 -->
+    <div class="modal" id="batchModal">
+        <div class="modal-content">
+            <div class="modal-title">批量添加基金</div>
+            <textarea class="modal-input" id="batchInput" placeholder="请输入基金代码，用逗号/空格分隔（如：005693,161725）"></textarea>
+            <div class="modal-btns">
+                <button class="btn btn-cancel" onclick="closeBatchModal()">取消</button>
+                <button class="btn" onclick="confirmBatchAdd()">确定</button>
+            </div>
+        </div>
     </div>
 
 <script>
-// 稳定配置
+// 配置项
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
 const baseUrl = "https://fundgz.1234567.com.cn/js/";
 // 排序状态：0=默认 1=降序(大→小) 2=升序(小→大)
 let sortStatus = 0;
-let fundDataCache = []; // 缓存基金数据，用于排序
+// 基金数据缓存
+let fundDataCache = [];
+// 选中的基金代码
+let selectedCodes = new Set();
 
-// 页面加载：自动读取+自动加载
+// 页面加载：自动读取本地保存的基金
 window.onload = function () {
-    let saved = localStorage.getItem("fundCodes");
-    if (saved) {
-        document.getElementById("fundInput").value = saved;
-        loadFundData();
+    let savedCodes = localStorage.getItem("fundCodes");
+    if (savedCodes) {
+        let codes = savedCodes.split(",").filter(c => c);
+        renderFundList(codes);
+        loadFundData(codes);
+    } else {
+        // 首次加载，显示空列表
+        renderFundList([]);
     }
 };
 
-// 切换排序模式
-function changeSort() {
-    sortStatus = (sortStatus + 1) % 3;
-    let arrow = document.getElementById("sortArrow");
-    if(sortStatus === 1){
-        arrow.textContent = "↓"; // 大→小
-    }else if(sortStatus === 2){
-        arrow.textContent = "↑"; // 小→大
-    }else{
-        arrow.textContent = ""; // 默认
-    }
-    renderTable(); // 重新渲染表格
+// ==================== 左侧列表相关 ====================
+// 渲染左侧自选基金列表
+function renderFundList(codes) {
+    let listEl = document.getElementById("fundList");
+    listEl.innerHTML = "";
+    codes.forEach(code => {
+        let item = document.createElement("div");
+        item.className = "fund-item" + (selectedCodes.has(code) ? " selected" : "");
+        item.dataset.code = code;
+        item.onclick = function () {
+            // 切换选中状态
+            if (selectedCodes.has(code)) {
+                selectedCodes.delete(code);
+                item.classList.remove("selected");
+            } else {
+                selectedCodes.add(code);
+                item.classList.add("selected");
+            }
+        };
+        // 先显示代码，加载数据后更新名称
+        item.textContent = code;
+        listEl.appendChild(item);
+    });
 }
 
-// 加载基金数据
-async function loadFundData() {
-    let input = document.getElementById("fundInput").value.trim();
+// 打开添加基金弹窗
+function openAddModal() {
+    document.getElementById("addModal").style.display = "flex";
+    document.getElementById("addInput").value = "";
+    document.getElementById("addInput").focus();
+}
+function closeAddModal() {
+    document.getElementById("addModal").style.display = "none";
+}
+// 确认添加单个基金
+function confirmAdd() {
+    let input = document.getElementById("addInput").value.trim();
     if (!input) return;
+    // 读取现有代码
+    let savedCodes = localStorage.getItem("fundCodes") || "";
+    let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
+    // 去重添加
+    if (!codes.includes(input)) {
+        codes.push(input);
+        localStorage.setItem("fundCodes", codes.join(","));
+    }
+    closeAddModal();
+    renderFundList(codes);
+    loadFundData(codes);
+}
 
-    // 格式化+去重
-    let codes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
-    let uniqueCodes = [...new Set(codes)];
+// 打开批量添加弹窗
+function openBatchModal() {
+    document.getElementById("batchModal").style.display = "flex";
+    document.getElementById("batchInput").value = "";
+    document.getElementById("batchInput").focus();
+}
+function closeBatchModal() {
+    document.getElementById("batchModal").style.display = "none";
+}
+// 确认批量添加
+function confirmBatchAdd() {
+    let input = document.getElementById("batchInput").value.trim();
+    if (!input) return;
+    // 格式化代码
+    let newCodes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
+    // 读取现有代码
+    let savedCodes = localStorage.getItem("fundCodes") || "";
+    let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
+    // 合并+去重
+    let mergedCodes = [...new Set([...codes, ...newCodes])];
+    localStorage.setItem("fundCodes", mergedCodes.join(","));
+    closeBatchModal();
+    renderFundList(mergedCodes);
+    loadFundData(mergedCodes);
+}
+
+// 删除选中的基金
+function deleteSelected() {
+    if (selectedCodes.size === 0) {
+        alert("请先选中要删除的基金");
+        return;
+    }
+    // 读取现有代码
+    let savedCodes = localStorage.getItem("fundCodes") || "";
+    let codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
+    // 过滤掉选中的代码
+    let newCodes = codes.filter(c => !selectedCodes.has(c));
+    localStorage.setItem("fundCodes", newCodes.join(","));
+    // 清空选中
+    selectedCodes.clear();
+    renderFundList(newCodes);
+    loadFundData(newCodes);
+}
+
+// ==================== 数据加载与表格渲染 ====================
+// 加载基金数据
+async function loadFundData(codes) {
+    // 如果没传codes，从本地读取
+    if (!codes) {
+        let savedCodes = localStorage.getItem("fundCodes");
+        codes = savedCodes ? savedCodes.split(",").filter(c => c) : [];
+    }
+    if (codes.length === 0) {
+        document.getElementById("fundTableBody").innerHTML = "";
+        return;
+    }
+
     fundDataCache = [];
-
-    for (let code of uniqueCodes) {
+    // 遍历加载每个基金
+    for (let code of codes) {
         try {
             let url = proxy + encodeURIComponent(baseUrl + code + ".js");
             let res = await fetch(url);
             let text = await res.text();
+            // 解析接口数据
             let data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
-
-            // ✅ 官方标准字段（100%有数据，无undefined）
-            fundDataCache.push({
+            
+            // 提取正确字段（100%有数据，无undefined）
+            let fundData = {
+                code: data.fundcode,
                 name: data.name,
-                nowRate: parseFloat(data.gszzl),   // 实时涨幅
-                yesRate: parseFloat(data.zdf) || 0, // 昨日涨跌幅（兜底0）
-                time: data.gztime
-            });
+                nowRate: parseFloat(data.gszzl) || 0,   // 今日涨幅
+                yesRate: parseFloat(data.zdf) || 0,     // 昨日涨幅
+                plate: data.fundtype || "未知板块",      // 持仓板块（基金类型）
+                time: data.gztime || "无时间"
+            };
+            fundDataCache.push(fundData);
+
+            // 更新左侧列表的基金名称
+            let listItems = document.querySelectorAll(`.fund-item[data-code="${code}"]`);
+            if (listItems.length > 0) {
+                listItems[0].textContent = `${data.name} (${code})`;
+            }
         } catch (e) {
-            fundDataCache.push({ name: `加载失败(${code})`, nowRate: 0, yesRate: 0, time: "-" });
+            console.error(`加载${code}失败:`, e);
+            fundDataCache.push({
+                code: code,
+                name: `加载失败(${code})`,
+                nowRate: 0,
+                yesRate: 0,
+                plate: "-",
+                time: "-"
+            });
         }
     }
+    // 渲染表格
+    renderTable();
+}
+
+// 切换排序模式
+function changeSort() {
+    sortStatus = (sortStatus + 1) % 3;
     renderTable();
 }
 
 // 渲染表格（根据排序状态）
 function renderTable() {
-    let table = document.getElementById("fundTable");
+    let tableBody = document.getElementById("fundTableBody");
     let sortedData = [...fundDataCache];
 
     // 排序逻辑
-    if(sortStatus === 1){
-        sortedData.sort((a,b) => b.nowRate - a.nowRate); // 大→小
-    }else if(sortStatus === 2){
-        sortedData.sort((a,b) => a.nowRate - b.nowRate); // 小→大
+    if (sortStatus === 1) {
+        sortedData.sort((a, b) => b.nowRate - a.nowRate); // 降序：大→小
+    } else if (sortStatus === 2) {
+        sortedData.sort((a, b) => a.nowRate - b.nowRate); // 升序：小→大
     }
-    // sortStatus=0 → 默认顺序（不排序）
+    // sortStatus=0：默认顺序（按添加顺序）
 
-    let html = `<tr>
-        <th>基金名称</th>
-        <th onclick="changeSort()">实时涨幅 <span class="sort-arrow" id="sortArrow"></span></th>
-        <th>昨日涨跌幅</th>
-        <th>更新时间</th>
-    </tr>`;
-
+    // 渲染表格内容
+    let html = "";
     sortedData.forEach(item => {
-        let nowColor = item.nowRate > 0 ? "red" : "green";
+        let nowColor = item.nowRate > 0 ? "red" : item.nowRate < 0 ? "green" : "";
         let yesColor = item.yesRate > 0 ? "red" : item.yesRate < 0 ? "green" : "";
         
         html += `
         <tr>
-            <td>${item.name}</td>
+            <td>${item.name} (${item.code})</td>
             <td class="${nowColor}">${item.nowRate.toFixed(2)}%</td>
             <td class="${yesColor}">${item.yesRate.toFixed(2)}%</td>
+            <td>${item.plate}</td>
             <td>${item.time}</td>
         </tr>`;
     });
+    tableBody.innerHTML = html;
 
-    table.innerHTML = html;
-    // 同步排序箭头
+    // 更新排序箭头
     let arrow = document.getElementById("sortArrow");
-    if(sortStatus === 1) arrow.textContent = "↓";
-    else if(sortStatus === 2) arrow.textContent = "↑";
-    else arrow.textContent = "";
+    if (sortStatus === 1) {
+        arrow.textContent = "↓";
+    } else if (sortStatus === 2) {
+        arrow.textContent = "↑";
+    } else {
+        arrow.textContent = "";
+    }
 }
 </script>
 </body>
