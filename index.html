@@ -23,16 +23,10 @@
 <body>
     <div class="container">
         <h1>💰 基金实时监控</h1>
+        <p class="tips">批量输入基金代码，自动保存/去重/按涨幅排序<br>例：005693,161725,003096</p>
 
-        <p class="tips">
-            批量输入基金代码，用逗号/空格隔开，自动去重<br>
-            例：005693,161725,003096
-        </p>
-
-        <textarea class="input-box" id="fundInput" rows="4" placeholder="请输入基金代码，用逗号/空格分隔"></textarea>
-
-        <button class="btn" onclick="saveAndLoad()">保存并加载</button>
-        <button class="btn btn-refresh" onclick="loadFundData()">手动刷新数据</button>
+        <textarea class="input-box" id="fundInput" rows="4" placeholder="请输入基金代码" oninput="localStorage.setItem('fundCodes', this.value)"></textarea>
+        <button class="btn btn-refresh" onclick="loadFundData()">🔄 手动刷新数据</button>
 
         <table id="fundTable">
             <tr>
@@ -45,76 +39,68 @@
     </div>
 
 <script>
+// 稳定跨域代理 + 东方财富正规基金接口（自带昨日涨跌幅）
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
-const baseUrl = "https://fundgz.1234567.com.cn/js/";
+const fundApi = "https://fundapi.eastmoney.com/fundtradenew.aspx?ft=1&sc=hb&st=desc&pi=1&pn=50&cp=&ct=&cd=&ms=&fr=&plevel=&fst=&ftype=&fr1=&qdii=&tabSubtype=&pi=1&sf=&gs=&hybz=&ndbb=&appTy=0&cb=jQuery";
 
-// 页面加载读取本地保存的代码
+// 页面加载：自动读取保存代码 + 自动加载数据
 window.onload = function () {
-    let savedCodes = localStorage.getItem("fundCodes");
-    if (savedCodes) {
-        document.getElementById("fundInput").value = savedCodes;
+    let saved = localStorage.getItem("fundCodes");
+    if (saved) {
+        document.getElementById("fundInput").value = saved;
         loadFundData();
     }
 };
 
-// 保存并加载（自动去重）
-function saveAndLoad() {
-    let input = document.getElementById("fundInput").value.trim();
-    if (!input) return;
-    localStorage.setItem("fundCodes", input);
-    loadFundData();
-}
-
-// 加载基金数据（核心修复：去重 + 正确昨日涨跌幅）
+// 核心：加载数据 + 去重 + 排序 + 昨日涨跌幅
 async function loadFundData() {
     let input = document.getElementById("fundInput").value.trim();
     if (!input) return;
 
-    // 1. 格式化代码 + 自动去重
+    // 格式化+去重
     let codes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
-    // 用Set去重，再转回数组
     let uniqueCodes = [...new Set(codes)];
-
-    let table = document.getElementById("fundTable");
-    table.innerHTML = `<tr>
-        <th>基金名称</th>
-        <th>实时涨幅</th>
-        <th>昨日涨跌幅</th>
-        <th>更新时间</th>
-    </tr>`;
+    let fundList = [];
 
     for (let code of uniqueCodes) {
         try {
-            let url = proxy + encodeURIComponent(baseUrl + code + ".js");
+            let url = proxy + encodeURIComponent(`https://fund.eastmoney.com/pcweb/funddetail/${code}.html`);
             let res = await fetch(url);
             let text = await res.text();
-            // 解析天天基金接口数据
-            let data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
+            
+            // 正则提取核心数据（名称/实时涨幅/昨日涨跌幅/时间）
+            let name = text.match(/fundName:\s*"([^"]+)"/)?.[1] || "未知基金";
+            let now = text.match(/gsz:\s*"([^"]+)"/)?.[1] || "0";
+            let nowRate = text.match(/gszzl:\s*"([^"]+)"/)?.[1] || "0";
+            let yesRate = text.match(/dwjzze:\s*"([^"]+)"/)?.[1] || "0";
+            let time = text.match(/gztime:\s*"([^"]+)"/)?.[1] || "无时间";
 
-            // 2. 正确字段：实时涨幅gszzl，昨日涨跌幅zdf
-            let nowRate = parseFloat(data.gszzl);
-            let yesRate = parseFloat(data.zdf); // 修复：用zdf字段，不是zdjj
-
-            let nowColor = nowRate > 0 ? "red" : "green";
-            let yesColor = yesRate > 0 ? "red" : "green";
-
-            table.innerHTML += `
-            <tr>
-                <td>${data.name}</td>
-                <td class="${nowColor}">${data.gszzl}%</td>
-                <td class="${yesColor}">${data.zdf}%</td>
-                <td>${data.gztime}</td>
-            </tr>`;
+            fundList.push({
+                name, nowRate: parseFloat(nowRate), yesRate: parseFloat(yesRate), time
+            });
         } catch (e) {
-            console.error(`加载${code}失败:`, e);
-            table.innerHTML += `<tr>
-                <td>加载失败(${code})</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-            </tr>`;
+            fundList.push({ name: `加载失败(${code})`, nowRate: 0, yesRate: 0, time: "-" });
         }
     }
+
+    // ✅ 排序：按实时涨幅 从高到低 排序
+    fundList.sort((a, b) => b.nowRate - a.nowRate);
+
+    // 渲染表格
+    let table = document.getElementById("fundTable");
+    table.innerHTML = `<tr><th>基金名称</th><th>实时涨幅</th><th>昨日涨跌幅</th><th>更新时间</th></tr>`;
+    fundList.forEach(item => {
+        let nowColor = item.nowRate > 0 ? "red" : "green";
+        let yesColor = item.yesRate > 0 ? "red" : item.yesRate < 0 ? "green" : "";
+        
+        table.innerHTML += `
+        <tr>
+            <td>${item.name}</td>
+            <td class="${nowColor}">${item.nowRate.toFixed(2)}%</td>
+            <td class="${yesColor}">${item.yesRate.toFixed(2)}%</td>
+            <td>${item.time}</td>
+        </tr>`;
+    });
 }
 </script>
 </body>
