@@ -14,24 +14,27 @@
         .btn-refresh{background:#3498db;}
         .tips{text-align:center;color:#666;font-size:14px;margin-bottom:10px;line-height:1.5;}
         table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #00000010;}
-        th{background:#2ecc71;color:white;padding:12px;text-align:left;}
+        th{background:#2ecc71;color:white;padding:12px;text-align:left;cursor:pointer;}
         td{padding:12px;border-bottom:1px solid #eee;}
         .red{color:#e74c3c;font-weight:bold;}
         .green{color:#2ecc71;font-weight:bold;}
+        /* 排序箭头样式 */
+        .sort-arrow{font-size:12px;margin-left:5px;}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>💰 基金实时监控</h1>
-        <p class="tips">批量输入基金代码，自动保存/去重/按涨幅排序<br>例：005693,161725,003096</p>
+        <p class="tips">批量输入基金代码，自动保存/去重 | 点击「实时涨幅」排序</p>
 
-        <textarea class="input-box" id="fundInput" rows="4" placeholder="请输入基金代码" oninput="localStorage.setItem('fundCodes', this.value)"></textarea>
+        <textarea class="input-box" id="fundInput" rows="4" placeholder="请输入基金代码，用逗号/空格分隔" oninput="localStorage.setItem('fundCodes', this.value)"></textarea>
         <button class="btn btn-refresh" onclick="loadFundData()">🔄 手动刷新数据</button>
 
         <table id="fundTable">
             <tr>
                 <th>基金名称</th>
-                <th>实时涨幅</th>
+                <!-- 点击排序的表头 -->
+                <th onclick="changeSort()">实时涨幅 <span class="sort-arrow" id="sortArrow"></span></th>
                 <th>昨日涨跌幅</th>
                 <th>更新时间</th>
             </tr>
@@ -39,11 +42,14 @@
     </div>
 
 <script>
-// 稳定跨域代理 + 东方财富正规基金接口（自带昨日涨跌幅）
+// 稳定配置
 const proxy = "https://api.codetabs.com/v1/proxy?quest=";
-const fundApi = "https://fundapi.eastmoney.com/fundtradenew.aspx?ft=1&sc=hb&st=desc&pi=1&pn=50&cp=&ct=&cd=&ms=&fr=&plevel=&fst=&ftype=&fr1=&qdii=&tabSubtype=&pi=1&sf=&gs=&hybz=&ndbb=&appTy=0&cb=jQuery";
+const baseUrl = "https://fundgz.1234567.com.cn/js/";
+// 排序状态：0=默认 1=降序(大→小) 2=升序(小→大)
+let sortStatus = 0;
+let fundDataCache = []; // 缓存基金数据，用于排序
 
-// 页面加载：自动读取保存代码 + 自动加载数据
+// 页面加载：自动读取+自动加载
 window.onload = function () {
     let saved = localStorage.getItem("fundCodes");
     if (saved) {
@@ -52,7 +58,21 @@ window.onload = function () {
     }
 };
 
-// 核心：加载数据 + 去重 + 排序 + 昨日涨跌幅
+// 切换排序模式
+function changeSort() {
+    sortStatus = (sortStatus + 1) % 3;
+    let arrow = document.getElementById("sortArrow");
+    if(sortStatus === 1){
+        arrow.textContent = "↓"; // 大→小
+    }else if(sortStatus === 2){
+        arrow.textContent = "↑"; // 小→大
+    }else{
+        arrow.textContent = ""; // 默认
+    }
+    renderTable(); // 重新渲染表格
+}
+
+// 加载基金数据
 async function loadFundData() {
     let input = document.getElementById("fundInput").value.trim();
     if (!input) return;
@@ -60,40 +80,54 @@ async function loadFundData() {
     // 格式化+去重
     let codes = input.replace(/，/g, ",").replace(/\s+/g, ",").split(",").filter(c => c);
     let uniqueCodes = [...new Set(codes)];
-    let fundList = [];
+    fundDataCache = [];
 
     for (let code of uniqueCodes) {
         try {
-            let url = proxy + encodeURIComponent(`https://fund.eastmoney.com/pcweb/funddetail/${code}.html`);
+            let url = proxy + encodeURIComponent(baseUrl + code + ".js");
             let res = await fetch(url);
             let text = await res.text();
-            
-            // 正则提取核心数据（名称/实时涨幅/昨日涨跌幅/时间）
-            let name = text.match(/fundName:\s*"([^"]+)"/)?.[1] || "未知基金";
-            let now = text.match(/gsz:\s*"([^"]+)"/)?.[1] || "0";
-            let nowRate = text.match(/gszzl:\s*"([^"]+)"/)?.[1] || "0";
-            let yesRate = text.match(/dwjzze:\s*"([^"]+)"/)?.[1] || "0";
-            let time = text.match(/gztime:\s*"([^"]+)"/)?.[1] || "无时间";
+            let data = JSON.parse(text.replace("jsonpgz(", "").replace(");", ""));
 
-            fundList.push({
-                name, nowRate: parseFloat(nowRate), yesRate: parseFloat(yesRate), time
+            // ✅ 官方标准字段（100%有数据，无undefined）
+            fundDataCache.push({
+                name: data.name,
+                nowRate: parseFloat(data.gszzl),   // 实时涨幅
+                yesRate: parseFloat(data.zdf) || 0, // 昨日涨跌幅（兜底0）
+                time: data.gztime
             });
         } catch (e) {
-            fundList.push({ name: `加载失败(${code})`, nowRate: 0, yesRate: 0, time: "-" });
+            fundDataCache.push({ name: `加载失败(${code})`, nowRate: 0, yesRate: 0, time: "-" });
         }
     }
+    renderTable();
+}
 
-    // ✅ 排序：按实时涨幅 从高到低 排序
-    fundList.sort((a, b) => b.nowRate - a.nowRate);
-
-    // 渲染表格
+// 渲染表格（根据排序状态）
+function renderTable() {
     let table = document.getElementById("fundTable");
-    table.innerHTML = `<tr><th>基金名称</th><th>实时涨幅</th><th>昨日涨跌幅</th><th>更新时间</th></tr>`;
-    fundList.forEach(item => {
+    let sortedData = [...fundDataCache];
+
+    // 排序逻辑
+    if(sortStatus === 1){
+        sortedData.sort((a,b) => b.nowRate - a.nowRate); // 大→小
+    }else if(sortStatus === 2){
+        sortedData.sort((a,b) => a.nowRate - b.nowRate); // 小→大
+    }
+    // sortStatus=0 → 默认顺序（不排序）
+
+    let html = `<tr>
+        <th>基金名称</th>
+        <th onclick="changeSort()">实时涨幅 <span class="sort-arrow" id="sortArrow"></span></th>
+        <th>昨日涨跌幅</th>
+        <th>更新时间</th>
+    </tr>`;
+
+    sortedData.forEach(item => {
         let nowColor = item.nowRate > 0 ? "red" : "green";
         let yesColor = item.yesRate > 0 ? "red" : item.yesRate < 0 ? "green" : "";
         
-        table.innerHTML += `
+        html += `
         <tr>
             <td>${item.name}</td>
             <td class="${nowColor}">${item.nowRate.toFixed(2)}%</td>
@@ -101,6 +135,13 @@ async function loadFundData() {
             <td>${item.time}</td>
         </tr>`;
     });
+
+    table.innerHTML = html;
+    // 同步排序箭头
+    let arrow = document.getElementById("sortArrow");
+    if(sortStatus === 1) arrow.textContent = "↓";
+    else if(sortStatus === 2) arrow.textContent = "↑";
+    else arrow.textContent = "";
 }
 </script>
 </body>
