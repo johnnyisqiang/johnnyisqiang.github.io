@@ -25,6 +25,22 @@
         table{width:100%;border-collapse:collapse;min-width:600px;}
         th{background:#409eff;color:white;height:40px;padding:0 10px;text-align:left;font-weight:normal;cursor:pointer;font-size:14px;}
         td{height:40px;padding:0 10px;border-bottom:1px solid #eee;font-size:14px;white-space:nowrap;}
+        /* ==================== 长名称优化核心 ==================== */
+        .fund-name{
+            max-width:200px;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            cursor:help;
+        }
+        .fund-name:hover{
+            white-space:normal;
+            overflow:visible;
+            background-color:#f5f7fa;
+            z-index:10;
+            position:relative;
+        }
+        /* ==================== 长名称优化核心 ==================== */
         .red{color:#f56c6c;font-weight:bold;}
         .green{color:#67c23a;font-weight:bold;}
         .sort{font-size:12px;margin-left:4px;}
@@ -45,6 +61,7 @@
             .right{width:100%;}
             .table-box{overflow-x:auto;/* 表格横向滑动 */}
             th,td{padding:0 8px;font-size:13px;}
+            .fund-name{max-width:150px;}/* 手机端更窄 */
             .top{font-size:15px;}
             .btn{height:36px;font-size:13px;}
         }
@@ -59,7 +76,7 @@
             <div class="list" id="fundList"></div>
             <div class="btns">
                 <button class="btn" onclick="addModal()">添加基金</button>
-                <button class="btn" onclick="loadFundData()">刷新数据</button>
+                <button class="btn" onclick="refreshData()">刷新数据</button>
                 <button class="btn" onclick="delSelect()">删除选中</button>
                 <button class="btn" onclick="batchModal()">批量添加</button>
             </div>
@@ -114,7 +131,7 @@ const realtimeApi = "https://fundgz.1234567.com.cn/js/";
 const BATCH_SIZE = 2;
 
 let sort = 0;
-let fundData = [];
+let fundData = []; // 核心数据数组，刷新时只更新内容不改变顺序
 let selectSet = new Set();
 
 // 完整版块匹配
@@ -153,7 +170,7 @@ window.onload = ()=>{
     codes = [...new Set(codes)];
     localStorage.setItem("funds", codes.join(","));
     renderList(codes);
-    loadFundData(codes);
+    loadInitialData(codes);
 };
 
 // 左侧列表渲染
@@ -190,7 +207,7 @@ function doAdd(){
     localStorage.setItem("funds", codes.join(","));
     closeModal();
     renderList(codes);
-    loadFundData(codes);
+    loadInitialData(codes);
 }
 
 // 批量添加
@@ -203,7 +220,7 @@ function doBatch(){
     localStorage.setItem("funds", codes.join(","));
     closeModal();
     renderList(codes);
-    loadFundData(codes);
+    loadInitialData(codes);
 }
 
 // 删除选中
@@ -214,11 +231,11 @@ function delSelect(){
     localStorage.setItem("funds", codes.join(","));
     selectSet.clear();
     renderList(codes);
-    loadFundData(codes);
+    loadInitialData(codes);
 }
 
-// 加载数据
-async function loadFundData(codes){
+// 初始化数据加载（完整重新加载）
+async function loadInitialData(codes){
     if(!codes){
         let saved = localStorage.getItem("funds")||"";
         codes = saved.split(",").filter(c=>c.trim());
@@ -260,6 +277,44 @@ async function loadFundData(codes){
     }
 }
 
+// ==================== 精准刷新核心函数 ====================
+async function refreshData(){
+    if(fundData.length===0){
+        loadInitialData();
+        return;
+    }
+    
+    let body = document.getElementById("tableBody");
+    body.innerHTML=`<tr><td colspan="4" class="loading">刷新中...</td></tr>`;
+
+    // 只更新数据，不改变基金顺序和列表
+    for(let i=0;i<fundData.length;i+=BATCH_SIZE){
+        let batch = fundData.slice(i,i+BATCH_SIZE);
+        let tasks = batch.map(async (item, idx)=>{
+            try{
+                let url = proxy + encodeURIComponent(`${realtimeApi}${item.code}.js`);
+                let res = await fetch(url);
+                let txt = await res.text();
+                let data = JSON.parse(txt.replace("jsonpgz(","").replace(");",""));
+                // 只更新需要刷新的字段，保留原始顺序和结构
+                return {
+                    ...item,
+                    now: parseFloat(data.gszzl)||0,
+                    time: data.gztime||"-"
+                };
+            }catch(e){
+                return item; // 加载失败时保持原数据
+            }
+        });
+        let res = await Promise.all(tasks);
+        // 替换对应位置的数据
+        res.forEach((newItem, idx)=>{
+            fundData[i + idx] = newItem;
+        });
+        renderTable();
+    }
+}
+
 // 排序
 function setSort(){
     sort = (sort+1)%3;
@@ -279,7 +334,7 @@ function renderTable(){
         let nowCls = d.now>0?"red":d.now<0?"green":"";
         html+=`
         <tr>
-            <td>${d.name}(${d.code})</td>
+            <td><span class="fund-name">${d.name}(${d.code})</span></td>
             <td class="${nowCls}">${d.now.toFixed(2)}%</td>
             <td>${d.plate}</td>
             <td>${d.time}</td>
