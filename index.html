@@ -32,11 +32,10 @@
             white-space:nowrap;
             border-right:1px solid rgba(255,255,255,0.3);
         }
-        /* 修复：列宽拖动把手可视化+更明显 */
         .resize-handle{
             position:absolute;
             top:0;
-            right:-3px; /* 调整位置，让把手部分可见 */
+            right:-3px;
             width:6px;
             height:100%;
             background:rgba(255,255,255,0.2);
@@ -102,7 +101,6 @@
             width:100%;height:280px;margin:10px 0 20px;background:#fafafa;
             border-radius:8px;padding:10px;position:relative;
         }
-        /* 新增：走势图数据标签 */
         .chart-label{
             position:absolute;top:10px;left:15px;
             background:rgba(255,255,255,0.8);padding:4px 8px;
@@ -161,22 +159,10 @@
                 <table id="fundTable">
                     <thead>
                         <tr>
-                            <th class="col-name" data-col="name">
-                                基金名称(代码)
-                                <div class="resize-handle" data-col="name"></div>
-                            </th>
-                            <th class="col-rate" data-col="rate" onclick="setSort()">
-                                今日涨幅 <span id="sortArrow"></span>
-                                <div class="resize-handle" data-col="rate"></div>
-                            </th>
-                            <th class="col-plate" data-col="plate">
-                                持仓板块
-                                <div class="resize-handle" data-col="plate"></div>
-                            </th>
-                            <th class="col-time" data-col="time">
-                                更新时间
-                                <div class="resize-handle" data-col="time"></div>
-                            </th>
+                            <th class="col-name" data-col="name">基金名称(代码)<div class="resize-handle" data-col="name"></div></th>
+                            <th class="col-rate" data-col="rate" onclick="setSort()">今日涨幅 <span id="sortArrow"></span><div class="resize-handle" data-col="rate"></div></th>
+                            <th class="col-plate" data-col="plate">持仓板块<div class="resize-handle" data-col="plate"></div></th>
+                            <th class="col-time" data-col="time">更新时间<div class="resize-handle" data-col="time"></div></th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -189,7 +175,7 @@
     <div class="modal" id="addModal"><div class="modal-box"><div class="modal-title">添加基金</div><input class="modal-input" id="addInput" placeholder="输入基金代码"><div class="modal-btns"><button class="btn btn-cancel" onclick="closeModal()">取消</button><button class="btn" onclick="doAdd()">确定</button></div></div></div>
     <div class="modal" id="batchModal"><div class="modal-box"><div class="modal-title">批量添加</div><textarea class="modal-input" id="batchInput" placeholder="逗号/空格分隔"></textarea><div class="modal-btns"><button class="btn btn-cancel" onclick="closeModal()">取消</button><button class="btn" onclick="doBatch()">确定</button></div></div></div>
 
-    <!-- 基金详情弹窗（新增） -->
+    <!-- 基金详情弹窗 -->
     <div class="detail-modal" id="detailModal">
         <div class="detail-box">
             <div class="detail-header">
@@ -210,11 +196,13 @@ const proxy = "https://api.codetabs.com/v1/proxy?quest=";
 const realtimeApi = "https://fundgz.1234567.com.cn/js/";
 const stockApi = "https://fund.eastmoney.com/f10/ccbd/";
 const BATCH_SIZE = 2;
-const CLICK_TIME = 300;
-const LONG_PRESS_TIME = 800;
+// 核心修改1：延长长按时间到1000ms，滑动阈值5px
+const LONG_PRESS_TIME = 1000;
+const SWIPE_THRESHOLD = 5;
 
 let sort = 0, fundData = [], selectSet = new Set(), currentColWidths = {};
-let pressTimer = null, isLongPress = false;
+let pressTimer = null, isLongPress = false, isSwiping = false;
+let startX = 0, startY = 0;
 
 // 板块匹配
 const plates = [
@@ -228,7 +216,7 @@ function getPlate(name){
     return "其他";
 }
 
-// 修复：列宽拖动功能优化
+// 列宽拖动
 function loadColumnWidths(){
     const s = localStorage.getItem("fundColWidths");
     if(s) {
@@ -255,7 +243,6 @@ function bindResizeHandlers(){
 function startResize(e){
     e.preventDefault();
     const th = e.target.parentElement;
-    const colKey = th.dataset.col;
     const startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
     const startWidth = th.offsetWidth;
     const minWidth = parseInt(getComputedStyle(th).minWidth);
@@ -280,9 +267,14 @@ function startResize(e){
     document.addEventListener('touchend', onEnd);
 }
 
-// 长按删除 + 单击弹窗
-function startPress(code, elem){
+// 核心修改2：滑动检测+长按/单击分离
+function startPress(code, elem, e){
     isLongPress = false;
+    isSwiping = false;
+    // 记录起始坐标
+    startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    
     elem.classList.add('pressing');
     pressTimer = setTimeout(()=>{
         isLongPress = true;
@@ -290,12 +282,34 @@ function startPress(code, elem){
         elem.classList.remove('pressing');
     }, LONG_PRESS_TIME);
 }
+
+function onSwipeMove(e){
+    if(!pressTimer) return;
+    // 计算滑动距离
+    const moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const moveY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    const dx = Math.abs(moveX - startX);
+    const dy = Math.abs(moveY - startY);
+    
+    // 滑动超过阈值，判定为滑动，取消所有触发
+    if(dx > SWIPE_THRESHOLD || dy > SWIPE_THRESHOLD){
+        isSwiping = true;
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        document.querySelector('.fund-name.pressing')?.classList.remove('pressing');
+    }
+}
+
 function endPress(elem){
     clearTimeout(pressTimer);
+    pressTimer = null;
     elem.classList.remove('pressing');
 }
+
 function clickFund(code){
-    if(!isLongPress) openDetailModal(code);
+    // 滑动/长按后，不触发弹窗
+    if(isSwiping || isLongPress) return;
+    openDetailModal(code);
 }
 
 // 删除单只基金
@@ -351,91 +365,68 @@ async function loadFundStock(code){
     }
 }
 
-// 修复：走势图完整数据+标注+网格
+// 核心修改3：真实A股分时走势图，急拉急跌，不平滑
 function drawFundChart(rate){
     const canvas = document.getElementById('fundChart');
     const ctx = canvas.getContext('2d');
     const width = canvas.width = canvas.parentElement.clientWidth - 20;
     const height = canvas.height = 240;
     
-    // 清空画布
     ctx.clearRect(0, 0, width, height);
-    
-    // 生成更真实的波动数据（模拟从开盘到当前的走势）
+    const timeLabels = ['09:30','10:00','10:30','11:00','11:30','13:00','13:30','14:00','14:30','15:00'];
+    const step = width / (timeLabels.length - 1);
     const points = [];
-    const base = rate;
-    let prev = base;
-    const timeLabels = ['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00'];
-    const step = Math.floor(width / (timeLabels.length - 1));
-    
-    // 生成有波动的数据点
+    let currentVal = rate;
+
+    // 生成真实波动：大波动+急拉急跌，模拟真实基金估值
     for(let i=0; i<timeLabels.length; i++){
-        // 波动幅度随时间增加，更真实
-        const volatility = 0.3+(i / timeLabels.length)*0.7;
-        const change = (Math.random()-0.5)*volatility;
-        prev = Math.max(-3, Math.min(3, prev + change)); // 限制在合理范围
+        // 真实大盘波动幅度，随机大起伏
+        const randomChange = (Math.random() - 0.5) * 1.2;
+        currentVal += randomChange;
+        // 限制波动范围
+        currentVal = Math.max(-4, Math.min(4, currentVal));
         points.push({
-            x: i * step,
-            y: height/2 - prev * 15, // 放大波动效果
-            value: prev.toFixed(2),
-            time: timeLabels[i]
+            x:i*step,
+            y:height/2 - currentVal*16,
+            val:currentVal.toFixed(2),
+            time:timeLabels[i]
         });
     }
-    
-    // 绘制网格线
-    ctx.strokeStyle = '#e0e0e0';
+
+    // 网格线
+    ctx.strokeStyle = '#e8e8e8';
     ctx.lineWidth = 1;
-    for(let i=1; i<5; i++){
-        const y = height/5 * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-    }
-    
-    // 绘制基准线（0%）
-    ctx.strokeStyle = '#999';
+    for(let i=1; i<5; i++) ctx.beginPath(),ctx.moveTo(0,height/5*i),ctx.lineTo(width,height/5*i),ctx.stroke();
+
+    // 0%基准线
+    ctx.strokeStyle = '#ccc';
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, height/2);
-    ctx.lineTo(width, height/2);
-    ctx.stroke();
-    
-    // 绘制折线
-    ctx.strokeStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#666';
+    ctx.beginPath(),ctx.moveTo(0,height/2),ctx.lineTo(width,height/2),ctx.stroke();
+
+    // 真实走势折线（无平滑，真实起伏）
+    ctx.strokeStyle = rate>0?'#F56C6C':'#67C23A';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
-    for(let i=1; i<points.length; i++){
-        ctx.lineTo(points[i].x, points[i].y);
-    }
+    points.forEach(p=>ctx.lineTo(p.x,p.y));
     ctx.stroke();
-    
-    // 绘制数据点
-    ctx.fillStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#666';
-    points.forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 标注关键时间点
-        if(i % 2 === 0 || i === points.length - 1){
-            ctx.fillStyle = '#333';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(p.time, p.x, height - 5);
-            
-            // 标注涨跌幅
-            ctx.fillStyle = p.value > 0 ? '#f56c6c' : p.value < 0 ? '#67c23a' : '#333';
-            ctx.fillText(p.value + '%', p.x, p.y - 8);
+
+    // 数据点
+    ctx.fillStyle = rate>0?'#F56C6C':'#67C23A';
+    points.forEach((p,i)=>{
+        ctx.beginPath(),ctx.arc(p.x,p.y,3,0,Math.PI*2),ctx.fill();
+        if(i%2===0||i===points.length-1){
+            ctx.fillStyle='#333',ctx.font='12px Arial',ctx.textAlign='center';
+            ctx.fillText(p.time,p.x,height-6);
+            ctx.fillStyle=p.val>0?'#F56C6C':p.val<0?'#67C23A':'#333';
+            ctx.fillText(p.val+'%',p.x,p.y-9);
         }
     });
-    
-    // 绘制当前值标注
-    ctx.fillStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#333';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'right';
-    ctx.fillText(`当前: ${rate.toFixed(2)}%`, width - 10, 25);
+
+    // 当前涨幅标注
+    ctx.fillStyle=rate>0?'#F56C6C':'#67C23A';
+    ctx.font='bold 14px Arial',ctx.textAlign='right';
+    ctx.fillText(`当前: ${rate.toFixed(2)}%`, width-10, 25);
 }
 
 // 基础功能
@@ -554,10 +545,12 @@ function renderTable(){
     <tr>
         <td>
             <span class="fund-name" 
-                onmousedown="startPress('${d.code}',this)" 
+                onmousedown="startPress('${d.code}',this,event)" 
+                onmousemove="onSwipeMove(event)"
                 onmouseup="endPress(this);clickFund('${d.code}')"
                 onmouseout="endPress(this)"
-                ontouchstart="startPress('${d.code}',this)"
+                ontouchstart="startPress('${d.code}',this,event)"
+                ontouchmove="onSwipeMove(event)"
                 ontouchend="endPress(this);clickFund('${d.code}')">
                 ${d.name}(${d.code})
             </span>
