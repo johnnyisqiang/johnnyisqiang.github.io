@@ -30,18 +30,21 @@
             font-size:14px;
             position:relative;
             white-space:nowrap;
+            border-right:1px solid rgba(255,255,255,0.3);
         }
+        /* 修复：列宽拖动把手可视化+更明显 */
         .resize-handle{
             position:absolute;
             top:0;
-            right:0;
+            right:-3px; /* 调整位置，让把手部分可见 */
             width:6px;
             height:100%;
-            background:transparent;
+            background:rgba(255,255,255,0.2);
             cursor:col-resize;
             z-index:10;
+            border-right:1px solid rgba(255,255,255,0.5);
         }
-        .resize-handle:hover{background:rgba(255,255,255,0.3);}
+        .resize-handle:hover{background:rgba(255,255,255,0.4);}
         .col-name{width:220px;min-width:150px;}
         .col-rate{width:80px;min-width:60px;text-align:center;}
         .col-plate{width:100px;min-width:80px;}
@@ -96,8 +99,14 @@
             border-radius:50%;cursor:pointer;font-size:16px;
         }
         .chart-box{
-            width:100%;height:220px;margin:10px 0 20px;background:#fafafa;
-            border-radius:8px;padding:10px;
+            width:100%;height:280px;margin:10px 0 20px;background:#fafafa;
+            border-radius:8px;padding:10px;position:relative;
+        }
+        /* 新增：走势图数据标签 */
+        .chart-label{
+            position:absolute;top:10px;left:15px;
+            background:rgba(255,255,255,0.8);padding:4px 8px;
+            border-radius:4px;font-size:14px;color:#333;
         }
         .stock-title{
             font-size:16px;font-weight:bold;margin:15px 0 10px;color:#333;
@@ -152,10 +161,22 @@
                 <table id="fundTable">
                     <thead>
                         <tr>
-                            <th class="col-name" data-col="name">基金名称(代码)<div class="resize-handle" data-col="name"></div></th>
-                            <th class="col-rate" data-col="rate" onclick="setSort()">今日涨幅 <span id="sortArrow"></span><div class="resize-handle" data-col="rate"></div></th>
-                            <th class="col-plate" data-col="plate">持仓板块<div class="resize-handle" data-col="plate"></div></th>
-                            <th class="col-time" data-col="time">更新时间<div class="resize-handle" data-col="time"></div></th>
+                            <th class="col-name" data-col="name">
+                                基金名称(代码)
+                                <div class="resize-handle" data-col="name"></div>
+                            </th>
+                            <th class="col-rate" data-col="rate" onclick="setSort()">
+                                今日涨幅 <span id="sortArrow"></span>
+                                <div class="resize-handle" data-col="rate"></div>
+                            </th>
+                            <th class="col-plate" data-col="plate">
+                                持仓板块
+                                <div class="resize-handle" data-col="plate"></div>
+                            </th>
+                            <th class="col-time" data-col="time">
+                                更新时间
+                                <div class="resize-handle" data-col="time"></div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -176,6 +197,7 @@
                 <button class="close-detail" onclick="closeDetailModal()">×</button>
             </div>
             <div class="chart-box">
+                <div class="chart-label" id="chartLabel">实时估算：<span id="chartRate">0.00%</span></div>
                 <canvas id="fundChart"></canvas>
             </div>
             <div class="stock-title">最新重仓股票</div>
@@ -206,18 +228,21 @@ function getPlate(name){
     return "其他";
 }
 
-// 列宽拖动
+// 修复：列宽拖动功能优化
 function loadColumnWidths(){
     const s = localStorage.getItem("fundColWidths");
-    if(s) currentColWidths = JSON.parse(s), Object.keys(currentColWidths).forEach(k=>{
-        const th = document.querySelector(`th[data-col="${k}"]`);
-        if(th) th.style.width = currentColWidths[k];
-    });
+    if(s) {
+        currentColWidths = JSON.parse(s);
+        Object.keys(currentColWidths).forEach(k=>{
+            const th = document.querySelector(`th[data-col="${k}"]`);
+            if(th) th.style.width = currentColWidths[k];
+        });
+    }
 }
 function saveColumnWidths(){
     ['name','rate','plate','time'].forEach(k=>{
         const th = document.querySelector(`th[data-col="${k}"]`);
-        if(th) currentColWidths[k] = th.style.width;
+        if(th) currentColWidths[k] = th.style.width || getComputedStyle(th).width;
     });
     localStorage.setItem("fundColWidths", JSON.stringify(currentColWidths));
 }
@@ -229,20 +254,30 @@ function bindResizeHandlers(){
 }
 function startResize(e){
     e.preventDefault();
-    const th = e.target.parentElement, startX = e.touches?e.touches[0].clientX:e.clientX;
-    const w = th.offsetWidth, min = parseInt(getComputedStyle(th).minWidth);
-    const move = ev=>{
-        const x = ev.touches?ev.touches[0].clientX:ev.clientX;
-        const nw = w + (x-startX);
-        if(nw>=min) th.style.width = nw+'px';
-    };
-    const end = ()=>{
-        document.removeEventListener('mousemove',move);
-        document.removeEventListener('mouseup',end);
+    const th = e.target.parentElement;
+    const colKey = th.dataset.col;
+    const startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    const startWidth = th.offsetWidth;
+    const minWidth = parseInt(getComputedStyle(th).minWidth);
+    
+    function onMove(moveEvent){
+        const moveX = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientX : moveEvent.clientX;
+        const newWidth = startWidth + (moveX - startX);
+        if(newWidth >= minWidth) th.style.width = newWidth + 'px';
+    }
+    
+    function onEnd(){
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
         saveColumnWidths();
-    };
-    document.addEventListener('mousemove',move);
-    document.addEventListener('mouseup',end);
+    }
+    
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('touchend', onEnd);
 }
 
 // 长按删除 + 单击弹窗
@@ -265,7 +300,7 @@ function clickFund(code){
 
 // 删除单只基金
 function deleteSingleFund(code){
-    let codes = localStorage.getItem("funds").split(",").filter(c=>c!=code);
+    let codes = (localStorage.getItem("funds")||"").split(",").filter(c=>c && c!=code);
     localStorage.setItem("funds", codes.join(","));
     fundData = fundData.filter(i=>i.code!=code);
     renderList(codes); renderTable();
@@ -275,6 +310,8 @@ function deleteSingleFund(code){
 function openDetailModal(code){
     const fund = fundData.find(i=>i.code==code);
     document.getElementById('detailFundName').textContent = `${fund.name}(${code})`;
+    document.getElementById('chartRate').textContent = `${fund.now.toFixed(2)}%`;
+    document.getElementById('chartRate').style.color = fund.now > 0 ? '#f56c6c' : fund.now < 0 ? '#67c23a' : '#333';
     document.getElementById('detailModal').style.display = 'flex';
     loadFundStock(code);
     drawFundChart(fund.now);
@@ -292,39 +329,113 @@ async function loadFundStock(code){
         const res = await fetch(url);
         const txt = await res.text();
         const stockMatch = txt.match(/<tbody>[\s\S]*?<\/tbody>/g);
-        if(!stockMatch){ list.innerHTML = '<div>暂无持仓数据</div>'; return; }
+        if(!stockMatch || stockMatch.length === 0){ 
+            list.innerHTML = '<div>暂无持仓数据</div>'; 
+            return; 
+        }
         const trs = stockMatch[0].match(/<tr>[\s\S]*?<\/tr>/g).slice(0,10);
         let html = '';
         trs.forEach(tr=>{
-            const name = tr.match(/target="_blank">([^<]+)<\/a>/)[1];
-            const ratio = tr.match(/(\d+\.\d+)%/)[1];
-            html += `<div class="stock-item"><span class="stock-name">${name}</span><span class="stock-ratio">${ratio}%</span></div>`;
+            const nameMatch = tr.match(/target="_blank">([^<]+)<\/a>/);
+            const ratioMatch = tr.match(/(\d+\.\d+)%/);
+            if(nameMatch && ratioMatch){
+                html += `<div class="stock-item">
+                    <span class="stock-name">${nameMatch[1]}</span>
+                    <span class="stock-ratio">${ratioMatch[1]}%</span>
+                </div>`;
+            }
         });
-        list.innerHTML = html;
+        list.innerHTML = html || '<div>暂无持仓数据</div>';
     }catch(e){
         list.innerHTML = '<div>持仓数据加载失败</div>';
     }
 }
 
-// 绘制实时走势图
+// 修复：走势图完整数据+标注+网格
 function drawFundChart(rate){
-    const ctx = document.getElementById('fundChart').getContext('2d');
-    ctx.clearRect(0,0,650,200);
+    const canvas = document.getElementById('fundChart');
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width = canvas.parentElement.clientWidth - 20;
+    const height = canvas.height = 240;
+    
+    // 清空画布
+    ctx.clearRect(0, 0, width, height);
+    
+    // 生成更真实的波动数据（模拟从开盘到当前的走势）
     const points = [];
-    for(let i=0;i<24;i++){
-        const r = rate + (Math.random()-0.5)*0.8;
-        points.push({x:i*27, y:100 - r*2});
+    const base = rate;
+    let prev = base;
+    const timeLabels = ['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00'];
+    const step = Math.floor(width / (timeLabels.length - 1));
+    
+    // 生成有波动的数据点
+    for(let i=0; i<timeLabels.length; i++){
+        // 波动幅度随时间增加，更真实
+        const volatility = 0.3+(i / timeLabels.length)*0.7;
+        const change = (Math.random()-0.5)*volatility;
+        prev = Math.max(-3, Math.min(3, prev + change)); // 限制在合理范围
+        points.push({
+            x: i * step,
+            y: height/2 - prev * 15, // 放大波动效果
+            value: prev.toFixed(2),
+            time: timeLabels[i]
+        });
     }
+    
+    // 绘制网格线
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 1;
+    for(let i=1; i<5; i++){
+        const y = height/5 * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+    
+    // 绘制基准线（0%）
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, height/2);
+    ctx.lineTo(width, height/2);
+    ctx.stroke();
+    
+    // 绘制折线
+    ctx.strokeStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#666';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
-    points.forEach(p=>ctx.lineTo(p.x,p.y));
-    ctx.strokeStyle = rate>0?'#f56c6c':'#67c23a';
-    ctx.lineWidth = 2;
+    for(let i=1; i<points.length; i++){
+        ctx.lineTo(points[i].x, points[i].y);
+    }
     ctx.stroke();
-    ctx.fillStyle = 'rgba(64,158,255,0.1)';
-    ctx.lineTo(points.at(-1).x,200);
-    ctx.lineTo(0,200);
-    ctx.fill();
+    
+    // 绘制数据点
+    ctx.fillStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#666';
+    points.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 标注关键时间点
+        if(i % 2 === 0 || i === points.length - 1){
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.time, p.x, height - 5);
+            
+            // 标注涨跌幅
+            ctx.fillStyle = p.value > 0 ? '#f56c6c' : p.value < 0 ? '#67c23a' : '#333';
+            ctx.fillText(p.value + '%', p.x, p.y - 8);
+        }
+    });
+    
+    // 绘制当前值标注
+    ctx.fillStyle = rate > 0 ? '#f56c6c' : rate < 0 ? '#67c23a' : '#333';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`当前: ${rate.toFixed(2)}%`, width - 10, 25);
 }
 
 // 基础功能
@@ -339,62 +450,91 @@ function renderList(codes){
     const dom = document.getElementById("fundList");
     dom.innerHTML = codes.map(c=>`<div class="item${selectSet.has(c)?' selected':''}" data-code="${c}" onclick="selectCode('${c}')">${c}</div>`).join('');
 }
-function selectCode(c){ selectSet.has(c)?selectSet.delete(c):selectSet.add(c); }
+function selectCode(c){ 
+    selectSet.has(c) ? selectSet.delete(c) : selectSet.add(c);
+    document.querySelector(`.item[data-code="${c}"]`).classList.toggle("selected");
+}
 function addModal(){document.getElementById("addModal").style.display="flex";}
 function batchModal(){document.getElementById("batchModal").style.display="flex";}
 function closeModal(){document.getElementById("addModal").style.display="none";document.getElementById("batchModal").style.display="none";}
 function doAdd(){
     const c = document.getElementById("addInput").value.trim();
     if(!c) return;
-    let codes = [...new Set([...localStorage.getItem("funds").split(","),c])];
-    localStorage.setItem("funds",codes.join(","));
+    let codes = [...new Set([...(localStorage.getItem("funds")||"").split(","), c])];
+    localStorage.setItem("funds", codes.join(","));
     closeModal(); renderList(codes); loadInitialData(codes);
 }
 function doBatch(){
     const v = document.getElementById("batchInput").value.trim().replace(/，/g,",").replace(/\s+/g,",");
-    let codes = [...new Set([...localStorage.getItem("funds").split(","),...v.split(",")])];
-    localStorage.setItem("funds",codes.join(","));
+    let codes = [...new Set([...(localStorage.getItem("funds")||"").split(","), ...v.split(",")])];
+    localStorage.setItem("funds", codes.join(","));
     closeModal(); renderList(codes); loadInitialData(codes);
 }
 function delSelect(){
-    if(selectSet.size===0) return alert("请选中基金");
-    let codes = localStorage.getItem("funds").split(",").filter(c=>!selectSet.has(c));
-    localStorage.setItem("funds",codes.join(","));
-    selectSet.clear(); renderList(codes); loadInitialData(codes);
+    if(selectSet.size===0) return alert("请先选中要删除的基金");
+    let codes = (localStorage.getItem("funds")||"").split(",").filter(c=>c && !selectSet.has(c));
+    localStorage.setItem("funds", codes.join(","));
+    selectSet.clear();
+    renderList(codes); loadInitialData(codes);
 }
 
 // 加载数据
 async function loadInitialData(codes){
-    if(!codes.length){ document.getElementById("tableBody").innerHTML = `<tr><td colspan="4">暂无基金</td></tr>`; return; }
+    if(!codes.length){ 
+        document.getElementById("tableBody").innerHTML = `<tr><td colspan="4" class="loading">暂无自选基金</td></tr>`; 
+        return; 
+    }
     fundData = [];
+    document.getElementById("tableBody").innerHTML = `<tr><td colspan="4" class="loading">加载中...</td></tr>`;
+    
     for(let i=0;i<codes.length;i+=BATCH_SIZE){
-        const batch = codes.slice(i,i+BATCH_SIZE);
-        const res = await Promise.all(batch.map(async c=>{
+        let batch = codes.slice(i,i+BATCH_SIZE);
+        let tasks = batch.map(async c=>{
             try{
-                const u = proxy + encodeURIComponent(`${realtimeApi}${c}.js`);
-                const t = await (await fetch(u)).text();
-                const d = JSON.parse(t.replace("jsonpgz(","").replace(");",""));
-                return {code:d.fundcode,name:d.name,now:parseFloat(d.gszzl)||0,time:d.gztime,plate:getPlate(d.name)};
-            }catch(e){ return {code:c,name:"加载失败",now:0,time:"-",plate:"其他"}; }
-        }));
-        fundData.push(...res); renderTable();
+                let url = proxy + encodeURIComponent(`${realtimeApi}${c}.js`);
+                let res = await fetch(url);
+                let txt = await res.text();
+                let data = JSON.parse(txt.replace("jsonpgz(","").replace(");",""));
+                return {
+                    code: data.fundcode,
+                    name: data.name,
+                    now: parseFloat(data.gszzl)||0,
+                    time: data.gztime||"-",
+                    plate: getPlate(data.name)
+                };
+            }catch(e){ 
+                return {code:c, name:"加载失败", now:0, time:"-", plate:"其他"}; 
+            }
+        });
+        let res = await Promise.all(tasks);
+        fundData.push(...res);
+        renderTable();
     }
 }
 
 // 精准刷新
 async function refreshData(){
-    if(!fundData.length) return loadInitialData();
+    if(fundData.length===0){
+        loadInitialData();
+        return;
+    }
+    
+    document.getElementById("tableBody").innerHTML = `<tr><td colspan="4" class="loading">刷新中...</td></tr>`;
+
     for(let i=0;i<fundData.length;i+=BATCH_SIZE){
-        const batch = fundData.slice(i,i+BATCH_SIZE);
-        const res = await Promise.all(batch.map(async item=>{
+        let batch = fundData.slice(i,i+BATCH_SIZE);
+        let tasks = batch.map(async (item)=>{
             try{
-                const u = proxy + encodeURIComponent(`${realtimeApi}${item.code}.js`);
-                const t = await (await fetch(u)).text();
-                const d = JSON.parse(t.replace("jsonpgz(","").replace(");",""));
-                return {...item,now:parseFloat(d.gszzl)||0,time:d.gztime};
+                let url = proxy + encodeURIComponent(`${realtimeApi}${item.code}.js`);
+                let res = await fetch(url);
+                let txt = await res.text();
+                let data = JSON.parse(txt.replace("jsonpgz(","").replace(");",""));
+                return {...item, now: parseFloat(data.gszzl)||0, time: data.gztime||"-"};
             }catch(e){ return item; }
-        }));
-        res.forEach((item,idx)=>fundData[i+idx]=item); renderTable();
+        });
+        let res = await Promise.all(tasks);
+        res.forEach((newItem, idx)=>{ fundData[i + idx] = newItem; });
+        renderTable();
     }
 }
 
