@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>基金实时盯盘</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui, "微软雅黑", sans-serif}
@@ -20,12 +22,13 @@ body{background:#f5f7fa;color:#333}
 .btn-cancel{background:#f5f7fa;color:#666}
 .right{flex:1;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.05);overflow:hidden}
 .table-box{width:100%;overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:680px;table-layout:fixed}
+table{width:100%;border-collapse:collapse;min-width:780px;table-layout:fixed}
 th{height:44px;background:#1377EB;color:#fff;text-align:left;padding:0 12px;font-size:14px;position:relative;cursor:pointer}
-.resize-handle{position:absolute;top:0;right:-3px;width:6px;height:100%;background:rgba(255,255,255,.2);cursor:col-resize;z-index:10}
+.resize-handle{position:absolute;top:0;right:0;width:6px;height:100%;background:rgba(255,255,255,.2);cursor:col-resize;z-index:10}
 td{height:48px;padding:0 12px;border-bottom:1px solid #f0f2f5;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.col-name{width:240px;min-width:180px}
+.col-name{width:200px;min-width:160px}
 .col-rate{width:90px;min-width:70px;text-align:center}
+.col-yesterday{width:90px;min-width:70px;text-align:center}
 .col-plate{width:110px;min-width:90px}
 .col-time{width:120px;min-width:100px}
 .fund-name{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -34,6 +37,9 @@ td{height:48px;padding:0 12px;border-bottom:1px solid #f0f2f5;font-size:15px;whi
 .loading{text-align:center;padding:24px;color:#999}
 .sort-arrow{display:inline-block;margin-left:4px}
 .fund-name.pressing{background:#e4e7ed}
+.no-value{color:#999}
+.date-info{font-size:12px;color:#666;display:block;margin-top:2px;font-weight:normal}
+.estimate-info{font-size:12px;color:#999;display:block;margin-top:2px;font-weight:normal}
 
 @media(max-width:768px){
 .container{flex-direction:column}
@@ -43,7 +49,7 @@ td{height:48px;padding:0 12px;border-bottom:1px solid #f0f2f5;font-size:15px;whi
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:999}
 .modal-box{width:90%;max-width:360px;background:#fff;border-radius:12px;padding:20px}
 .modal-title{margin-bottom:12px}
-.modal-input{width:100%;height:90px;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px}
+.modal-input{width:100%;height:44px;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px}
 .modal-btns{display:flex;gap:10px;justify-content:flex-end}
 </style>
 </head>
@@ -55,18 +61,21 @@ td{height:48px;padding:0 12px;border-bottom:1px solid #f0f2f5;font-size:15px;whi
     <div class="list" id="fundList"></div>
     <div class="btns">
       <button class="btn" onclick="addModal()">添加基金</button>
-      <button class="btn" onclick="refreshData()">刷新数据</button>
+      <button class="btn" onclick="refreshOnlyRate()">刷新数据</button>
+      <button class="btn" onclick="autoModal()">自动刷新</button>
       <button class="btn" onclick="delSelect()">删除选中</button>
       <button class="btn" onclick="batchModal()">批量添加</button>
+      <button class="btn" onclick="refreshYesterdayData()">更新昨日数据</button>
     </div>
   </div>
   <div class="right">
     <div class="table-box">
-      <table>
+      <table id="mainTable">
         <thead>
           <tr>
             <th class="col-name" data-col="name">基金名称(代码)<div class="resize-handle" data-col="name"></div></th>
             <th class="col-rate" data-col="rate" onclick="sortByRate()">今日涨幅 <span class="sort-arrow" id="rateArrow"></span><div class="resize-handle" data-col="rate"></div></th>
+            <th class="col-yesterday" data-col="yesterday" onclick="sortByYesterday()">昨日涨幅 <span class="sort-arrow" id="yesterdayArrow"></span><div class="resize-handle" data-col="yesterday"></div></th>
             <th class="col-plate" data-col="plate">持仓板块<div class="resize-handle" data-col="plate"></div></th>
             <th class="col-time" data-col="time">更新时间<div class="resize-handle" data-col="time"></div></th>
           </tr>
@@ -97,81 +106,204 @@ td{height:48px;padding:0 12px;border-bottom:1px solid #f0f2f5;font-size:15px;whi
     </div>
   </div>
 </div>
+<div class="modal" id="autoModal">
+  <div class="modal-box">
+    <div class="modal-title">设置自动刷新</div>
+    <input class="modal-input" id="autoInput" placeholder="输入刷新间隔秒数（如：5）" value="5">
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="closeModal();stopAutoRefresh();">停止</button>
+      <button class="btn" onclick="doAutoRefresh()">开始</button>
+    </div>
+  </div>
+</div>
 
 <script>
+// ============== 核心配置 ==============
 const proxy = 'https://api.codetabs.com/v1/proxy?quest=';
 const gzUrl = 'https://fundgz.1234567.com.cn/js/';
 
+// 基金名称映射表
+const knownFundNames = {
+  '018278': '博时稳健增利债券C',
+  '022137': '中银MSCI中国A50互联互通指数增强E',
+  '019910': '博时上证自然资源ETF联接C',
+  '008036': '蜂巢恒利债券C',
+  '004401': '金信民兴债券C',
+  '000001': '华夏成长混合',
+  '000011': '华夏大盘精选',
+  '110011': '易方达中小盘',
+  '519674': '银河创新成长',
+  '003096': '中欧医疗健康C',
+  '161725': '招商中证白酒指数',
+  '110022': '易方达消费行业',
+  '000251': '工银金融地产',
+  '161028': '富国中证新能源汽车',
+  '001679': '前海开源公用事业',
+  '007300': '国联安中证半导体ETF联接C',
+  '001475': '易方达国防军工',
+  '005827': '易方达蓝筹精选',
+  '003834': '华夏能源革新',
+  '320007': '诺安成长',
+  '015292': '金元顺安产业臻选混合C',
+  '024195': '永赢国证商用卫星通信产业ETF发起联接C'
+};
+
 let fundData = [];
 let selectSet = new Set();
-let colWidths = JSON.parse(localStorage.getItem('colWidths') || '{}');
-let sortState = 0;
+let sortState = {rate: 0, yesterday: 0};
+let autoTimer = null;
+let yesterdayDataCache = JSON.parse(localStorage.getItem('yesterdayDataCache') || '{}');
+const cacheExpiry = 24 * 60 * 60 * 1000; // 缓存24小时
 
-const LONG_PRESS_TIME = 800;
-const SWIPE_THRESHOLD = 6;
-
-let pressTimer = null;
-let isSwiping = false;
-let startX = 0, startY = 0;
-
+// 板块识别规则
 const plateMap = [
-  {k:['半导体','芯片'],v:'半导体'},
-  {k:['新能源','光伏','锂电'],v:'新能源'},
-  {k:['医药','医疗','生物'],v:'医药'},
-  {k:['军工'],v:'军工'},
-  {k:['AI','人工智能','算力'],v:'AI'},
-  {k:['消费','白酒','食品'],v:'消费'},
-  {k:['金融','证券','银行'],v:'金融'},
-  {k:['创业板','科创50','沪深300','中证500','中证1000'],v:'宽基指数'},
-  {k:['混合'],v:'混合型'},
-  {k:['黄金','贵金属'],v:'黄金'}
+  {k:['半导体','芯片','集成电路'],v:'半导体'},
+  {k:['新能源','光伏','锂电','电池','新能车'],v:'新能源'},
+  {k:['医药','医疗','生物','健康','医疗保健'],v:'医药'},
+  {k:['军工','国防','航天'],v:'军工'},
+  {k:['AI','人工智能','算力','智能','科技'],v:'AI'},
+  {k:['消费','白酒','食品','饮料','消费品'],v:'消费'},
+  {k:['金融','证券','银行','保险','券商'],v:'金融'},
+  {k:['创业板','科创50','沪深300','中证500','中证1000','MSCI','A50','上证50','指数','宽基'],v:'宽基指数'},
+  {k:['混合','灵活配置','混合型','灵活'],v:'混合型'},
+  {k:['黄金','贵金属','有色金属'],v:'黄金'},
+  {k:['债券','纯债','短债','中短债','利率债','信用债'],v:'债券型'},
+  {k:['自然资源','资源','大宗商品','原油','石油','商品'],v:'资源/大宗商品'},
+  {k:['科技','信息技术','TMT','互联网','软件','计算机'],v:'科技'},
+  {k:['港股','恒生','香港','H股'],v:'港股'},
+  {k:['美股','纳斯达克','标普','美国'],v:'美股'},
+  {k:['房地产','地产','REITs'],v:'房地产'},
+  {k:['环保','环境','低碳','碳中和','ESG'],v:'环保'},
+  {k:['传媒','文化','娱乐','游戏','影视'],v:'传媒'},
+  {k:['农业','农林牧渔','种植','养殖'],v:'农业'},
+  {k:['化工','化学','材料','新材料'],v:'化工'},
+  {k:['建筑','建材','基建','工程'],v:'建筑'},
+  {k:['通信','5G','通讯','电信','卫星'],v:'通信'},
+  {k:['电力','公用事业','电网','供电'],v:'公用事业'},
+  {k:['钢铁','煤炭','有色金属','有色'],v:'周期'},
+  {k:['旅游','酒店','餐饮','文旅'],v:'旅游餐饮'},
+  {k:['教育','培训','学校'],v:'教育'},
+  {k:['汽车','汽配','零部件','整车'],v:'汽车'},
+  {k:['物流','快递','运输','仓储','航运'],v:'物流运输'},
+  {k:['家电','家居','电器','家具'],v:'家电家居'},
+  {k:['服装','纺织','鞋帽','服饰'],v:'服装纺织'},
+  {k:['食品饮料','食品','饮料','酒类'],v:'食品饮料'},
+  {k:['零售','商业','百货','超市'],v:'零售商业'},
+  {k:['医药生物','生物医药','生物技术'],v:'医药生物'},
+  {k:['电子','元器件'],v:'电子'},
+  {k:['计算机','软件','IT'],v:'计算机'},
+  {k:['传媒','出版','广播','电视'],v:'传媒'},
+  {k:['其他'],v:'其他'}
 ];
 
-function getPlate(name){
-  const n = name.toLowerCase();
+function getPlate(code, nameFromApi){
+  const fullName = knownFundNames[code] || nameFromApi || '';
+  const n = fullName.toLowerCase();
   for(let p of plateMap) if(p.k.some(k=>n.includes(k))) return p.v;
   return '其他';
 }
 
+// ============== 列宽拖拽功能 ==============
 function initResize(){
-  document.querySelectorAll('.resize-handle').forEach(h=>{
-    h.addEventListener('mousedown',startResize);
-    h.addEventListener('touchstart',startResize,{passive:false});
+  const savedWidths = JSON.parse(localStorage.getItem('colWidths') || '{}');
+  Object.keys(savedWidths).forEach(col => {
+    const th = document.querySelector(`th[data-col="${col}"]`);
+    if(th && savedWidths[col]) th.style.width = savedWidths[col];
   });
-  Object.keys(colWidths).forEach(k=>{
-    const th = document.querySelector(`th[data-col="${k}"]`);
-    if(th) th.style.width = colWidths[k];
+  
+  document.querySelectorAll('.resize-handle').forEach(handle => {
+    handle.addEventListener('mousedown', startDrag);
   });
 }
 
-function startResize(e){
+let isDragging = false;
+let dragColumn = null;
+let dragStartWidth = 0;
+let dragStartX = 0;
+let dragOverlay = null;
+
+function startDrag(e) {
   e.preventDefault();
-  const th = e.target.parentElement;
-  const sx = e.type==='touchstart' ? e.touches[0].clientX : e.clientX;
-  const sw = th.offsetWidth;
-  const min = parseInt(getComputedStyle(th).minWidth) || 100;
-  function move(me){
-    const mx = me.type==='touchmove' ? me.touches[0].clientX : me.clientX;
-    const w = sw + (mx - sx);
-    if(w >= min) th.style.width = w+'px';
-  }
-  function end(){
-    document.removeEventListener('mousemove',move);
-    document.removeEventListener('mouseup',end);
-    document.removeEventListener('touchmove',move);
-    document.removeEventListener('touchend',end);
-    colWidths[th.dataset.col] = th.style.width;
-    localStorage.setItem('colWidths',JSON.stringify(colWidths));
-  }
-  document.addEventListener('mousemove',move);
-  document.addEventListener('mouseup',end);
-  document.addEventListener('touchmove',move,{passive:false});
-  document.addEventListener('touchend',end);
+  e.stopPropagation();
+  
+  const handle = e.target;
+  const th = handle.parentElement;
+  dragColumn = th.dataset.col;
+  dragStartWidth = th.offsetWidth;
+  dragStartX = e.clientX;
+  isDragging = true;
+  
+  document.addEventListener('mousemove', handleDrag);
+  document.addEventListener('mouseup', stopDrag);
+  createDragOverlay();
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
 }
 
+function handleDrag(e) {
+  if (!isDragging || !dragColumn) return;
+  e.preventDefault();
+  
+  const deltaX = e.clientX - dragStartX;
+  calculateNewWidth(deltaX);
+}
+
+function calculateNewWidth(deltaX) {
+  const newWidth = Math.max(60, Math.min(500, dragStartWidth + deltaX));
+  const th = document.querySelector(`th[data-col="${dragColumn}"]`);
+  if (th) {
+    th.style.width = newWidth + 'px';
+    const table = document.getElementById('mainTable');
+    if (table) {
+      const colIndex = Array.from(th.parentElement.children).indexOf(th);
+      const rows = table.querySelectorAll('tr');
+      rows.forEach(row => {
+        const cell = row.children[colIndex];
+        if (cell) cell.style.width = newWidth + 'px';
+      });
+    }
+    const savedWidths = JSON.parse(localStorage.getItem('colWidths') || '{}');
+    savedWidths[dragColumn] = newWidth + 'px';
+    localStorage.setItem('colWidths', JSON.stringify(savedWidths));
+  }
+}
+
+function stopDrag() {
+  cleanupDrag();
+  document.removeEventListener('mousemove', handleDrag);
+  document.removeEventListener('mouseup', stopDrag);
+}
+
+function cleanupDrag() {
+  isDragging = false;
+  dragColumn = null;
+  if (dragOverlay && dragOverlay.parentNode) {
+    dragOverlay.parentNode.removeChild(dragOverlay);
+    dragOverlay = null;
+  }
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+}
+
+function createDragOverlay() {
+  dragOverlay = document.createElement('div');
+  dragOverlay.style.position = 'fixed';
+  dragOverlay.style.top = '0';
+  dragOverlay.style.left = '0';
+  dragOverlay.style.width = '100%';
+  dragOverlay.style.height = '100%';
+  dragOverlay.style.zIndex = '10000';
+  dragOverlay.style.cursor = 'col-resize';
+  dragOverlay.style.backgroundColor = 'transparent';
+  document.body.appendChild(dragOverlay);
+}
+
+// ============== 基金列表管理 ==============
 function loadList(){
-  const codes = [...new Set((localStorage.getItem('funds')||'').split(',').filter(c=>c))];
-  localStorage.setItem('funds',codes.join(','));
+  const fundsStr = localStorage.getItem('funds') || '';
+  const codes = [...new Set(fundsStr.split(',').filter(c=>c && c.trim()))];
+  localStorage.setItem('funds', codes.join(','));
+  
   document.getElementById('fundList').innerHTML = codes.map(c=>
     `<div class="item${selectSet.has(c)?' selected':''}" data-code="${c}" onclick="toggleSelect('${c}')">${c}</div>`
   ).join('');
@@ -180,18 +312,23 @@ function loadList(){
 
 function toggleSelect(c){
   selectSet.has(c) ? selectSet.delete(c) : selectSet.add(c);
-  document.querySelector(`.item[data-code="${c}"]`).classList.toggle('selected');
+  const item = document.querySelector(`.item[data-code="${c}"]`);
+  if (item) item.classList.toggle('selected');
 }
 
 function delOne(code){
   const codes = loadList().filter(c=>c!==code);
   localStorage.setItem('funds',codes.join(','));
+  selectSet.delete(code);
   loadList();
   loadFunds();
 }
 
 function delSelect(){
-  if(selectSet.size===0) return alert('请先选中基金');
+  if(selectSet.size===0) {
+    alert('请先选中基金');
+    return;
+  }
   const codes = loadList().filter(c=>!selectSet.has(c));
   localStorage.setItem('funds',codes.join(','));
   selectSet.clear();
@@ -199,16 +336,41 @@ function delSelect(){
   loadFunds();
 }
 
-function addModal(){document.getElementById('addModal').style.display='flex'}
-function batchModal(){document.getElementById('batchModal').style.display='flex'}
+// ============== 模态框功能 ==============
+function addModal(){
+  document.getElementById('addModal').style.display='flex';
+  document.getElementById('addInput').value = '';
+  document.getElementById('addInput').focus();
+}
+
+function batchModal(){
+  document.getElementById('batchModal').style.display='flex';
+  document.getElementById('batchInput').value = '';
+  document.getElementById('batchInput').focus();
+}
+
+function autoModal(){
+  document.getElementById('autoModal').style.display='flex';
+  document.getElementById('autoInput').value = '5';
+  document.getElementById('autoInput').focus();
+}
+
 function closeModal(){
   document.getElementById('addModal').style.display='none';
   document.getElementById('batchModal').style.display='none';
+  document.getElementById('autoModal').style.display='none';
 }
 
 function doAdd(){
   const c = document.getElementById('addInput').value.trim();
-  if(!c) return;
+  if(!c) {
+    alert('请输入基金代码');
+    return;
+  }
+  if(!/^\d{6}$/.test(c)) {
+    alert('基金代码应为6位数字');
+    return;
+  }
   const codes = [...new Set([...loadList(), c])];
   localStorage.setItem('funds',codes.join(','));
   closeModal();
@@ -218,55 +380,369 @@ function doAdd(){
 
 function doBatch(){
   const v = document.getElementById('batchInput').value.trim().replace(/，/g,',').replace(/\s+/g,',');
-  const codes = [...new Set([...loadList(), ...v.split(',')])];
+  if(!v) {
+    alert('请输入基金代码');
+    return;
+  }
+  const newCodes = v.split(',').filter(c=>/^\d{6}$/.test(c));
+  if(newCodes.length === 0) {
+    alert('未找到有效的基金代码');
+    return;
+  }
+  const codes = [...new Set([...loadList(), ...newCodes])];
   localStorage.setItem('funds',codes.join(','));
   closeModal();
   loadList();
   loadFunds();
+  alert(`成功添加 ${newCodes.length} 个基金`);
+}
+
+// ============== 缓存管理 ==============
+function getCachedYesterdayData(code) {
+  const cache = yesterdayDataCache[code];
+  if (cache && (Date.now() - cache.timestamp) < cacheExpiry) {
+    return cache.value;
+  }
+  return null;
+}
+
+function setCachedYesterdayData(code, value) {
+  yesterdayDataCache[code] = {
+    value: value,
+    timestamp: Date.now()
+  };
+  localStorage.setItem('yesterdayDataCache', JSON.stringify(yesterdayDataCache));
+}
+
+function cleanCache() {
+  const now = Date.now();
+  let hasChange = false;
+  for (const code in yesterdayDataCache) {
+    if ((now - yesterdayDataCache[code].timestamp) >= cacheExpiry) {
+      delete yesterdayDataCache[code];
+      hasChange = true;
+    }
+  }
+  if (hasChange) {
+    localStorage.setItem('yesterdayDataCache', JSON.stringify(yesterdayDataCache));
+  }
+}
+
+// ============== 昨日数据获取逻辑 ==============
+async function fetchYesterdayRate(code) {
+  const cached = getCachedYesterdayData(code);
+  if (cached !== null) {
+    return cached;
+  }
+  
+  try {
+    const apiUrl = `http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=20`;
+    const url = proxy + encodeURIComponent(apiUrl);
+    
+    const response = await fetch(url, { 
+      timeout: 10000,
+      headers: {
+        'Referer': 'http://fundf10.eastmoney.com/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    if (response.ok) {
+      const text = await response.text();
+      
+      const contentMatch = text.match(/content:"([^"]*)"/);
+      if (contentMatch) {
+        const content = contentMatch[1].replace(/\\"/g, '"').replace(/\\r\\n/g, '');
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(content, 'text/html');
+        const rows = doc.querySelectorAll('tbody tr');
+        
+        if (rows.length >= 1) {
+          const latestRow = rows[0];
+          const cells = latestRow.querySelectorAll('td');
+          
+          if (cells.length >= 4) {
+            const rateText = cells[3].textContent.trim();
+            
+            const parseRate = (text) => {
+              if (!text || text === '--' || text === '') {
+                return null;
+              }
+              
+              const cleanText = text.replace(/[%\s+]/g, '').trim();
+              const rate = parseFloat(cleanText);
+              
+              if (isNaN(rate)) {
+                return null;
+              }
+              
+              return rate;
+            };
+            
+            const rate = parseRate(rateText);
+            
+            if (rate !== null) {
+              setCachedYesterdayData(code, rate);
+              return rate;
+            } else {
+              for (let i = 0; i < cells.length; i++) {
+                const cellText = cells[i].textContent.trim();
+                if (cellText.includes('%') && !cellText.includes('开放')) {
+                  const altRate = parseRate(cellText);
+                  if (altRate !== null) {
+                    setCachedYesterdayData(code, altRate);
+                    return altRate;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    try {
+      const apiUrl2 = `http://api.fund.eastmoney.com/f10/lsjz?fundCode=${code}&pageIndex=1&pageSize=2`;
+      const url2 = proxy + encodeURIComponent(apiUrl2);
+      
+      const response2 = await fetch(url2, { 
+        timeout: 10000,
+        headers: {
+          'Referer': 'http://fundf10.eastmoney.com/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      if (response2.ok) {
+        const text2 = await response2.text();
+        
+        const jsonMatch = text2.match(/jQuery[^(]+\((.*)\)/);
+        if (jsonMatch) {
+          try {
+            const data = JSON.parse(jsonMatch[1]);
+            
+            if (data.Data && data.Data.LSJZList && data.Data.LSJZList.length >= 1) {
+              const latest = data.Data.LSJZList[0];
+              
+              if (latest.JZZZL && latest.JZZZL !== '') {
+                const rate = parseFloat(latest.JZZZL);
+                if (!isNaN(rate)) {
+                  setCachedYesterdayData(code, rate);
+                  return rate;
+                }
+              }
+            }
+          } catch (e) {
+            console.log(`基金 ${code} 解析JSON失败:`, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`基金 ${code} 备用接口调用失败:`, e);
+    }
+    
+  } catch (e) {
+    console.log(`基金 ${code} 获取昨日数据失败:`, e);
+  }
+  
+  return null;
+}
+
+// ============== 实时数据获取 ==============
+async function fetchFundData(code, retries = 1) {
+  try {
+    const url = proxy + encodeURIComponent(`${gzUrl}${code}.js?${Date.now()}`);
+    const r = await fetch(url, {timeout: 3000});
+    const t = await r.text();
+    const d = JSON.parse(t.replace('jsonpgz(','').replace(');',''));
+    
+    const fundName = knownFundNames[code] || d.name || '未知基金';
+    const hasValidValue = !(parseFloat(d.gszzl) === 0 && (d.gztime === '-' || !d.gztime));
+    
+    let yesterdayRate = getCachedYesterdayData(code);
+    
+    return {
+      code,
+      name: fundName,
+      now: hasValidValue ? (parseFloat(d.gszzl) || 0) : null,
+      yesterday: yesterdayRate,
+      time: hasValidValue ? (d.gztime || '-') : '--',
+      plate: getPlate(code, d.name)
+    };
+  } catch (e) {
+    if (retries > 0) return fetchFundData(code, retries - 1);
+    
+    const fundName = knownFundNames[code] || '加载失败';
+    return {
+      code,
+      name: fundName,
+      now: null,
+      yesterday: null,
+      time: '--',
+      plate: getPlate(code, fundName)
+    };
+  }
 }
 
 async function loadFunds(){
   const codes = loadList();
   if(codes.length===0){
-    document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" class="loading">暂无自选基金</td></tr>`;
+    document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" class="loading">暂无自选基金</td></tr>`;
     fundData = [];
     return;
   }
   fundData = [];
-  document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" class="loading">加载中...</td></tr>`;
-  for(let i=0;i<codes.length;i+=2){
-    const batch = codes.slice(i,i+2);
-    const tasks = batch.map(async c=>{
-      try{
-        const url = proxy+encodeURIComponent(`${gzUrl}${c}.js?${Date.now()}`);
-        const r = await fetch(url);
-        const t = await r.text();
-        const d = JSON.parse(t.replace('jsonpgz(','').replace(');',''));
-        return {
-          code:c,
-          name:d.name,
-          now:parseFloat(d.gszzl)||0,
-          time:d.gztime||'-',
-          plate:getPlate(d.name)
-        };
-      }catch(e){
-        return {code:c,name:'加载失败',now:0,time:'-',plate:'其他'};
+  document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" class="loading">加载中...</td></tr>`;
+  
+  const tasks = codes.map(code => fetchFundData(code));
+  fundData = await Promise.all(tasks);
+  
+  cleanCache();
+  
+  applySort();
+  renderTable();
+  
+  setTimeout(async () => {
+    for (const item of fundData) {
+      if (item.yesterday === null) {
+        try {
+          const yesterdayRate = await fetchYesterdayRate(item.code);
+          if (yesterdayRate !== null) {
+            item.yesterday = yesterdayRate;
+            renderTable();
+          }
+        } catch (e) {
+          console.error(`异步加载基金 ${item.code} 昨日数据失败:`, e);
+        }
       }
-    });
-    fundData.push(...await Promise.all(tasks));
-    applySort();
+    }
+  }, 1000);
+}
+
+// ============== 🔴 优化刷新功能 ==============
+// 并行刷新，速度快，无动画无提示
+async function refreshOnlyRate(){
+  if(fundData.length === 0) {
+    return;
+  }
+  
+  // 并行获取所有基金的实时数据
+  const tasks = fundData.map(async (item) => {
+    try {
+      const url = proxy + encodeURIComponent(`${gzUrl}${item.code}.js?${Date.now()}`);
+      const response = await fetch(url, {timeout: 3000});
+      
+      if (response.ok) {
+        const text = await response.text();
+        const d = JSON.parse(text.replace('jsonpgz(','').replace(');',''));
+        
+        const hasValidValue = !(parseFloat(d.gszzl) === 0 && (d.gztime === '-' || !d.gztime));
+        
+        // 只更新今日涨幅和时间
+        item.now = hasValidValue ? (parseFloat(d.gszzl) || 0) : item.now;
+        item.time = hasValidValue ? (d.gztime || '-') : item.time;
+      }
+    } catch (e) {
+      console.log(`刷新基金 ${item.code} 数据失败:`, e);
+    }
+  });
+  
+  // 等待所有请求完成
+  await Promise.allSettled(tasks);
+  
+  // 重新排序并更新显示
+  applySort();
+  renderTable();
+}
+
+// 更新昨日数据
+async function refreshYesterdayData() {
+  if(fundData.length === 0) {
+    alert('暂无基金数据');
+    return;
+  }
+  
+  alert('开始更新昨日数据...');
+  
+  yesterdayDataCache = {};
+  localStorage.removeItem('yesterdayDataCache');
+  
+  for (const item of fundData) {
+    try {
+      const yesterdayRate = await fetchYesterdayRate(item.code);
+      if (yesterdayRate !== null) {
+        item.yesterday = yesterdayRate;
+      } else {
+        item.yesterday = null;
+      }
+    } catch (e) {
+      console.error(`更新基金 ${item.code} 昨日数据失败:`, e);
+      item.yesterday = null;
+    }
+  }
+  
+  renderTable();
+  alert('昨日数据更新完成！');
+}
+
+// ============== 自动刷新 ==============
+function doAutoRefresh(){
+  const seconds = parseInt(document.getElementById('autoInput').value.trim());
+  if(isNaN(seconds) || seconds < 1){
+    alert('请输入有效的秒数（最小1秒）');
+    return;
+  }
+  stopAutoRefresh();
+  autoTimer = setInterval(()=>{
+    refreshOnlyRate();
+  }, seconds * 1000);
+  closeModal();
+  alert(`已启动自动刷新，每${seconds}秒刷新一次`);
+}
+
+function stopAutoRefresh(){
+  if(autoTimer){
+    clearInterval(autoTimer);
+    autoTimer = null;
   }
 }
 
+// ============== 排序功能 ==============
 function sortByRate(){
-  sortState = (sortState + 1) % 3;
+  sortState.rate = (sortState.rate + 1) % 3;
+  sortState.yesterday = 0;
   const arrow = document.getElementById('rateArrow');
-  if(sortState === 1){
+  const yesterdayArrow = document.getElementById('yesterdayArrow');
+  
+  if(sortState.rate === 1){
     arrow.textContent = '↓';
-    fundData.sort((a,b)=>b.now - a.now);
-  }else if(sortState === 2){
+    yesterdayArrow.textContent = '';
+    fundData.sort((a,b)=> (b.now ?? -Infinity) - (a.now ?? -Infinity));
+  }else if(sortState.rate === 2){
     arrow.textContent = '↑';
-    fundData.sort((a,b)=>a.now - b.now);
+    yesterdayArrow.textContent = '';
+    fundData.sort((a,b)=> (a.now ?? -Infinity) - (b.now ?? -Infinity));
+  }else{
+    arrow.textContent = '';
+  }
+  renderTable();
+}
+
+function sortByYesterday(){
+  sortState.yesterday = (sortState.yesterday + 1) % 3;
+  sortState.rate = 0;
+  const arrow = document.getElementById('yesterdayArrow');
+  const rateArrow = document.getElementById('rateArrow');
+  
+  if(sortState.yesterday === 1){
+    arrow.textContent = '↓';
+    rateArrow.textContent = '';
+    fundData.sort((a,b)=> (b.yesterday ?? -Infinity) - (a.yesterday ?? -Infinity));
+  }else if(sortState.yesterday === 2){
+    arrow.textContent = '↑';
+    rateArrow.textContent = '';
+    fundData.sort((a,b)=> (a.yesterday ?? -Infinity) - (b.yesterday ?? -Infinity));
   }else{
     arrow.textContent = '';
   }
@@ -274,71 +750,68 @@ function sortByRate(){
 }
 
 function applySort(){
-  if(sortState === 1) fundData.sort((a,b)=>b.now - a.now);
-  if(sortState === 2) fundData.sort((a,b)=>a.now - b.now);
+  if(sortState.rate === 1) fundData.sort((a,b)=> (b.now ?? -Infinity) - (a.now ?? -Infinity));
+  if(sortState.rate === 2) fundData.sort((a,b)=> (a.now ?? -Infinity) - (b.now ?? -Infinity));
+  if(sortState.yesterday === 1) fundData.sort((a,b)=> (b.yesterday ?? -Infinity) - (a.yesterday ?? -Infinity));
+  if(sortState.yesterday === 2) fundData.sort((a,b)=> (a.yesterday ?? -Infinity) - (b.yesterday ?? -Infinity));
   renderTable();
 }
 
+// ============== 渲染表格 ==============
 function renderTable(){
-  document.getElementById('tableBody').innerHTML = fundData.map(d=>`
+  if (fundData.length === 0) {
+    document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" class="loading">暂无基金数据</td></tr>`;
+    return;
+  }
+  
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = fundData.map(d=>{
+    const rateHtml = d.now === null ? 
+      `<td class="no-value">--</td>` : 
+      `<td class="${d.now>0?'red':d.now<0?'green':''}">${d.now.toFixed(2)}%</td>`;
+    
+    let yesterdayHtml = '';
+    if (d.yesterday === null) {
+      yesterdayHtml = `<td class="no-value">--<span class="estimate-info">(未更新)</span></td>`;
+    } else {
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (yesterday.getDay() === 0) {
+        yesterday.setDate(yesterday.getDate() - 2);
+      } else if (yesterday.getDay() === 6) {
+        yesterday.setDate(yesterday.getDate() - 1);
+      }
+      
+      const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const day = String(yesterday.getDate()).padStart(2, '0');
+      const dateStr = `${month}-${day}`;
+      
+      yesterdayHtml = `<td class="${d.yesterday>0?'red':d.yesterday<0?'green':''}">${d.yesterday.toFixed(2)}%<span class="date-info">${dateStr}</span></td>`;
+    }
+    
+    return `
   <tr>
     <td>
-      <span class="fund-name"
-        onmousedown="startPress('${d.code}',this,event)"
-        onmousemove="onSwipeMove(event)"
-        onmouseup="endPress(this)"
-        onmouseout="endPress(this)"
-        ontouchstart="startPress('${d.code}',this,event)"
-        ontouchmove="onSwipeMove(event)"
-        ontouchend="endPress(this)">
+      <span class="fund-name" onclick="toggleSelect('${d.code}')">
         ${d.name}(${d.code})
       </span>
     </td>
-    <td class="${d.now>0?'red':d.now<0?'green':''}">${d.now.toFixed(2)}%</td>
+    ${rateHtml}
+    ${yesterdayHtml}
     <td>${d.plate}</td>
     <td>${d.time}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 }
 
-function refreshData(){loadFunds()}
-
-// 长按删除 + 滑动屏蔽
-function startPress(code, el, e){
-  isSwiping = false;
-  startX = e.type==='touchstart' ? e.touches[0].clientX : e.clientX;
-  startY = e.type==='touchstart' ? e.touches[0].clientY : e.clientY;
-  el.classList.add('pressing');
-  pressTimer = setTimeout(()=>{
-    if(confirm('确定删除该基金？')) delOne(code);
-    el.classList.remove('pressing');
-  }, LONG_PRESS_TIME);
-}
-
-function onSwipeMove(e){
-  if(!pressTimer) return;
-  const x = e.type==='touchmove' ? e.touches[0].clientX : e.clientX;
-  const y = e.type==='touchmove' ? e.touches[0].clientY : e.clientY;
-  const dx = Math.abs(x - startX);
-  const dy = Math.abs(y - startY);
-  if(dx > SWIPE_THRESHOLD || dy > SWIPE_THRESHOLD){
-    isSwiping = true;
-    clearTimeout(pressTimer);
-    pressTimer = null;
-    document.querySelector('.fund-name.pressing')?.classList.remove('pressing');
-  }
-}
-
-function endPress(el){
-  clearTimeout(pressTimer);
-  pressTimer = null;
-  el.classList.remove('pressing');
-}
-
-window.onload = ()=>{
+// ============== 初始化 ==============
+window.onload = function(){
+  initResize();
   loadList();
   loadFunds();
-  initResize();
-}
+};
 </script>
 </body>
 </html>
